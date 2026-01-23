@@ -181,6 +181,10 @@ export class HabitService {
 		const habitNames = this.settings.autoDetectHabits 
 			? await this.autoDetectHabits()
 			: this.settings.habits;
+
+		// Ensure today's daily note contains checkbox lines for all known habits
+		// so the checklist is present even when a habit hasn't been completed yet.
+		await this.ensureHabitsForDate(moment().format(this.settings.dateFormat));
 		
 		for (const habitName of habitNames) {
 			if (!habitName.trim()) continue;
@@ -212,6 +216,81 @@ export class HabitService {
 		}
 		
 		return habits;
+	}
+
+	/**
+	 * Ensure a given date's note contains checkbox entries for all habits.
+	 * If a checkbox is missing for a habit, insert an unchecked line (`- [ ] Habit`).
+	 */
+	async ensureHabitsForDate(date: string): Promise<void> {
+		const habitNames = this.settings.autoDetectHabits
+			? await this.autoDetectHabits()
+			: this.settings.habits;
+
+		if (!habitNames || habitNames.length === 0) return;
+
+		const fileName = `${date}.md`;
+		const filePath = this.getFilePath(fileName);
+
+		let file = this.app.vault.getAbstractFileByPath(filePath);
+		if (!file || !(file instanceof TFile)) {
+			// Create the folder if it doesn't exist
+			if (this.settings.dailyNotesFolder) {
+				const folderExists = this.app.vault.getAbstractFileByPath(this.settings.dailyNotesFolder);
+				if (!folderExists) {
+					await this.app.vault.createFolder(this.settings.dailyNotesFolder);
+				}
+			}
+			file = await this.app.vault.create(filePath, '');
+		}
+
+		if (!(file instanceof TFile)) return;
+
+		let content = await this.app.vault.read(file);
+
+		// Ensure the Habits section exists
+		const sectionPattern = /^## Habits\s*$/m;
+		if (!sectionPattern.test(content)) {
+			content = content + (content ? '\n\n' : '') + '## Habits\n\n';
+			// write early so subsequent reads see the section
+			await this.app.vault.modify(file, content);
+			content = await this.app.vault.read(file);
+		}
+
+		// Re-locate the Habits section and its bounds
+		const match = content.match(sectionPattern);
+		const start = match ? match.index! + match[0].length : -1;
+		const afterSection = start !== -1 ? content.substring(start) : '';
+		const nextSectionMatch = afterSection.match(/^## /m);
+		const sectionContent = nextSectionMatch
+			? afterSection.substring(0, nextSectionMatch.index)
+			: afterSection;
+
+		// Collect existing habit names in the section
+		const checkboxPattern = /- \[[ x]\] (.+)$/gm;
+		const existing = new Set<string>();
+		let m: RegExpExecArray | null;
+		while ((m = checkboxPattern.exec(sectionContent)) !== null) {
+			existing.add(m[1].trim());
+		}
+
+		// Build lines to insert for missing habits
+		let linesToInsert = '';
+		for (const habit of habitNames) {
+			if (!habit.trim()) continue;
+			if (!existing.has(habit)) {
+				linesToInsert += `- [ ] ${habit}\n`;
+			}
+		}
+
+		if (linesToInsert) {
+			// Insert right after the Habits section header (start)
+			const insertPos = start !== -1 ? start : content.length;
+			const before = content.substring(0, insertPos);
+			const after = content.substring(insertPos);
+			content = before + linesToInsert + after;
+			await this.app.vault.modify(file, content);
+		}
 	}
 
 	/**
