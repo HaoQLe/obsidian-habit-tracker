@@ -1,0 +1,11 @@
+{
+	"id": "obsidian-checklist",
+	"name": "Daily Habit Checklist",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Track daily habits using a checklist-based system with streak tracking and statistics",
+	"author": "",
+	"authorUrl": "",
+	"fundingUrl": "",
+	"isDesktopOnly": false
+}
