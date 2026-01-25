@@ -6,6 +6,7 @@ export interface HabitTrackerSettings {
 	habits: string[];
 	autoDetectHabits: boolean;
 	streakMode: 'strict' | 'lenient';
+	collapseAnimation: 'smooth' | 'instant';
 }
 
 export const DEFAULT_SETTINGS: HabitTrackerSettings = {
@@ -14,6 +15,7 @@ export const DEFAULT_SETTINGS: HabitTrackerSettings = {
 	habits: [],
 	autoDetectHabits: false,
 	streakMode: 'strict',
+	collapseAnimation: 'smooth',
 }
 
 export class HabitTrackerSettingTab extends PluginSettingTab {
@@ -77,6 +79,19 @@ export class HabitTrackerSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.streakMode)
 				.onChange(async (value: 'strict' | 'lenient') => {
 					this.plugin.settings.streakMode = value;
+					await this.plugin.saveSettings();
+				}));
+
+		// Collapse animation setting
+		new Setting(containerEl)
+			.setName('Habit collapse animation')
+			.setDesc('Animation style when collapsing/expanding habits')
+			.addDropdown(dropdown => dropdown
+				.addOption('smooth', 'Smooth transition')
+				.addOption('instant', 'Instant')
+				.setValue(this.plugin.settings.collapseAnimation)
+				.onChange(async (value: 'smooth' | 'instant') => {
+					this.plugin.settings.collapseAnimation = value;
 					await this.plugin.saveSettings();
 				}));
 

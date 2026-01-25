@@ -9,6 +9,7 @@ export class HabitTrackerView extends ItemView {
 	private settings: HabitTrackerSettings;
 	private habitData: HabitData[] = [];
 	private isRefreshing = false;
+	private collapsedHabits: Set<string> = new Set();
 
 	constructor(leaf: WorkspaceLeaf, habitService: HabitService, settings: HabitTrackerSettings) {
 		super(leaf);
@@ -159,9 +160,41 @@ export class HabitTrackerView extends ItemView {
 			if (!habit.name.trim()) continue;
 
 			const habitCard = statsSection.createDiv('habit-stat-card');
+			
+			// Apply animation class based on setting
+			if (this.settings.collapseAnimation === 'instant') {
+				habitCard.addClass('instant');
+			}
+			
+			// Apply collapsed class if habit is in collapsed set
+			if (this.collapsedHabits.has(habit.name)) {
+				habitCard.addClass('collapsed');
+			}
 
-			// Habit name
-			habitCard.createEl('h4', { text: habit.name, cls: 'habit-stat-name' });
+			// Habit name with collapse toggle
+			const nameHeader = habitCard.createDiv('habit-stat-name-container');
+			const nameEl = nameHeader.createEl('h4', { text: habit.name, cls: 'habit-stat-name' });
+			
+			const toggleBtn = nameHeader.createEl('button', {
+				cls: 'collapse-toggle',
+				text: '▼'
+			});
+			
+			if (this.collapsedHabits.has(habit.name)) {
+				toggleBtn.addClass('collapsed');
+			}
+			
+			toggleBtn.addEventListener('click', () => {
+				if (this.collapsedHabits.has(habit.name)) {
+					this.collapsedHabits.delete(habit.name);
+					habitCard.removeClass('collapsed');
+					toggleBtn.removeClass('collapsed');
+				} else {
+					this.collapsedHabits.add(habit.name);
+					habitCard.addClass('collapsed');
+					toggleBtn.addClass('collapsed');
+				}
+			});
 
 			// Stats grid
 			const statsGrid = habitCard.createDiv('habit-stat-grid');

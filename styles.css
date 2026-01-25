@@ -124,12 +124,71 @@
 	border: 1px solid var(--background-modifier-border);
 }
 
-.habit-stat-name {
-	margin-top: 0;
+.habit-stat-name-container {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
 	margin-bottom: 20px;
+}
+
+.habit-stat-card.collapsed .habit-stat-name-container {
+	margin-bottom: 0;
+}
+
+.habit-stat-card.collapsed {
+	padding: 12px 20px;
+}
+
+.habit-stat-name {
+	margin: 0;
 	color: var(--text-normal);
 	border-bottom: 2px solid var(--background-modifier-border);
 	padding-bottom: 10px;
+	flex: 1;
+}
+
+.collapse-toggle {
+	padding: 6px 8px;
+	background: transparent;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	color: var(--text-normal);
+	cursor: pointer;
+	font-size: 0.8em;
+	transition: transform 0.2s ease;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	line-height: 1;
+}
+
+.collapse-toggle:hover {
+	background: var(--background-modifier-hover);
+	border-color: var(--interactive-accent);
+}
+
+.collapse-toggle.collapsed {
+	transform: rotate(180deg);
+}
+
+/* Collapsed state */
+.habit-stat-card.collapsed > .habit-stat-grid,
+.habit-stat-card.collapsed > .progress-container,
+.habit-stat-card.collapsed > .recent-activity {
+	overflow: hidden;
+	transition: opacity 0.2s ease, max-height 0.2s ease;
+	opacity: 0;
+	max-height: 0;
+}
+
+.habit-stat-card.instant.collapsed > .habit-stat-grid,
+.habit-stat-card.instant.collapsed > .progress-container,
+.habit-stat-card.instant.collapsed > .recent-activity {
+	transition: none;
 }
 
 .habit-stat-grid {
