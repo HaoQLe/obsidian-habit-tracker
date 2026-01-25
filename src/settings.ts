@@ -83,28 +83,88 @@ export class HabitTrackerSettingTab extends PluginSettingTab {
 		// Manual habits list (only show if auto-detect is off)
 		if (!this.plugin.settings.autoDetectHabits) {
 			containerEl.createEl('h3', { text: 'Habits' });
+			containerEl.createEl('p', { 
+				text: 'Drag to reorder habits',
+				cls: 'setting-item-description'
+			});
 
 			const habitsContainer = containerEl.createDiv('habits-container');
 
 			this.plugin.settings.habits.forEach((habit, index) => {
-				const habitSetting = new Setting(habitsContainer)
-					.addText(text => {
-						text.setPlaceholder('Enter habit name')
-							.setValue(habit)
-							.onChange(async (value) => {
-								this.plugin.settings.habits[index] = value;
-								await this.plugin.saveSettings();
-							});
-					})
-					.addExtraButton(button => {
-						button.setIcon('trash')
-							.setTooltip('Delete habit')
-							.onClick(async () => {
-								this.plugin.settings.habits.splice(index, 1);
-								await this.plugin.saveSettings();
-								this.display();
-							});
+				const habitItemEl = habitsContainer.createDiv('habit-item-wrapper');
+				habitItemEl.setAttribute('draggable', 'true');
+				habitItemEl.setAttribute('data-index', String(index));
+
+				const dragHandle = habitItemEl.createDiv('habit-drag-handle');
+				dragHandle.innerHTML = '⋮';
+
+				const habitInputWrapper = habitItemEl.createDiv('habit-input-wrapper');
+
+				const textInput = habitInputWrapper.createEl('input', {
+					type: 'text',
+					cls: 'habit-input',
+					placeholder: 'Enter habit name',
+					value: habit,
+				});
+
+				textInput.addEventListener('change', async () => {
+					this.plugin.settings.habits[index] = textInput.value;
+					await this.plugin.saveSettings();
+				});
+
+				const deleteBtn = habitItemEl.createEl('button', {
+					cls: 'habit-delete-btn',
+					text: '×',
+				});
+
+				deleteBtn.addEventListener('click', async () => {
+					this.plugin.settings.habits.splice(index, 1);
+					await this.plugin.saveSettings();
+					this.display();
+				});
+
+				// Drag event listeners
+				habitItemEl.addEventListener('dragstart', (e) => {
+					habitItemEl.classList.add('dragging');
+					e.dataTransfer!.effectAllowed = 'move';
+					e.dataTransfer!.setData('text/html', habitItemEl.innerHTML);
+				});
+
+				habitItemEl.addEventListener('dragend', () => {
+					habitItemEl.classList.remove('dragging');
+					document.querySelectorAll('.habit-item-wrapper').forEach(el => {
+						el.classList.remove('drag-over');
 					});
+				});
+
+				habitItemEl.addEventListener('dragover', (e) => {
+					e.preventDefault();
+					e.dataTransfer!.dropEffect = 'move';
+					if (e.target !== habitItemEl && !habitItemEl.classList.contains('dragging')) {
+						habitItemEl.classList.add('drag-over');
+					}
+				});
+
+				habitItemEl.addEventListener('dragleave', () => {
+					habitItemEl.classList.remove('drag-over');
+				});
+
+				habitItemEl.addEventListener('drop', async (e) => {
+					e.preventDefault();
+					const draggedItem = document.querySelector('.dragging') as HTMLElement;
+					if (draggedItem && draggedItem !== habitItemEl) {
+						const draggedIndex = parseInt(draggedItem.getAttribute('data-index') || '0');
+						const targetIndex = parseInt(habitItemEl.getAttribute('data-index') || '0');
+
+						// Reorder array
+						const [movedHabit] = this.plugin.settings.habits.splice(draggedIndex, 1);
+						const insertIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+						this.plugin.settings.habits.splice(insertIndex, 0, movedHabit);
+
+						await this.plugin.saveSettings();
+						this.display();
+					}
+				});
 			});
 
 			// Add new habit button

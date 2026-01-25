@@ -1,6 +1,8 @@
 /* Habit Tracker View Styles */
 .habit-tracker-container {
 	padding: 20px;
+	min-width: 400px;
+	min-height: 600px;
 }
 
 .habit-tracker-header {
@@ -206,17 +208,22 @@
 	display: grid;
 	grid-template-columns: repeat(7, 1fr);
 	gap: 10px;
+	width: 100%;
 }
 
 .activity-day {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	justify-content: center;
 	gap: 8px;
 	padding: 10px;
 	background: var(--background-primary);
 	border-radius: 6px;
 	border: 1px solid var(--background-modifier-border);
+	aspect-ratio: 1;
+	min-height: 70px;
+	min-width: 70px;
 }
 
 .activity-day-name {
@@ -242,4 +249,91 @@
 /* Settings styles */
 .habits-container {
 	margin-bottom: 20px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.habit-item-wrapper {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 12px;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	cursor: move;
+	transition: all 0.2s ease;
+}
+
+.habit-item-wrapper:hover {
+	background: var(--background-modifier-hover);
+	border-color: var(--interactive-accent);
+}
+
+.habit-item-wrapper.dragging {
+	opacity: 0.5;
+	background: var(--interactive-accent-hover);
+}
+
+.habit-item-wrapper.drag-over {
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.habit-drag-handle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	color: var(--text-muted);
+	font-size: 1.2em;
+	flex-shrink: 0;
+	user-select: none;
+}
+
+.habit-input-wrapper {
+	flex: 1;
+}
+
+.habit-input {
+	width: 100%;
+	padding: 6px 8px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	color: var(--text-normal);
+	font-family: inherit;
+	font-size: inherit;
+}
+
+.habit-input:focus {
+	outline: none;
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.1);
+}
+
+.habit-delete-btn {
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	background: transparent;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	color: var(--text-muted);
+	font-size: 1.2em;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.habit-delete-btn:hover {
+	background: var(--background-modifier-border);
+	color: var(--text-error);
+	border-color: var(--text-error);
 }

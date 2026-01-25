@@ -295,35 +295,43 @@ export class HabitService {
 
 	/**
 	 * Calculate streaks for a habit
+	 * Current streak: consecutive completed days counting backwards, ignoring today if not completed
+	 * This represents the "running" streak that can be extended if today is completed
 	 */
 	private calculateStreaks(completions: HabitCompletion[]): { currentStreak: number; longestStreak: number } {
-		let currentStreak = 0;
+		if (completions.length === 0) {
+			return { currentStreak: 0, longestStreak: 0 };
+		}
+
 		let longestStreak = 0;
 		let tempStreak = 0;
 		
-		// Start from today (last element) and go backwards
+		// First pass: calculate longest streak by going through all completions
 		for (let i = completions.length - 1; i >= 0; i--) {
 			if (completions[i].completed) {
 				tempStreak++;
-				if (i === completions.length - 1) {
-					currentStreak = tempStreak;
-				}
 				longestStreak = Math.max(longestStreak, tempStreak);
 			} else {
-				if (this.settings.streakMode === 'strict') {
-					// Strict mode: any gap breaks the streak
-					tempStreak = 0;
-					if (i === completions.length - 1) {
-						currentStreak = 0;
-					}
-				} else {
-					// Lenient mode: only break if multiple consecutive days missed
-					// For now, treat same as strict (can be enhanced later)
-					tempStreak = 0;
-					if (i === completions.length - 1) {
-						currentStreak = 0;
-					}
-				}
+				tempStreak = 0;
+			}
+		}
+		
+		// Second pass: calculate current streak
+		// Start from yesterday (or today if today is completed) and count backwards
+		let currentStreak = 0;
+		let startIdx = completions.length - 1;
+		
+		// If today is not completed, start from yesterday
+		if (!completions[startIdx].completed && startIdx > 0) {
+			startIdx = startIdx - 1;
+		}
+		
+		// Count consecutive completed days from the starting point backwards
+		for (let i = startIdx; i >= 0; i--) {
+			if (completions[i].completed) {
+				currentStreak++;
+			} else {
+				break; // Stop at the first incomplete day
 			}
 		}
 		
