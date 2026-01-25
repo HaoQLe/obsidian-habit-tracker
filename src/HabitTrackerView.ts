@@ -154,35 +154,6 @@ export class HabitTrackerView extends ItemView {
 			cls: 'overall-stat-item'
 		});
 
-		// Heatmap: show days where ALL habits were completed (last 30 days)
-		if (this.habitData.length > 0) {
-			const heatmapSection = statsSection.createDiv('habit-heatmap-section');
-			heatmapSection.createEl('h4', { text: 'Completion Heatmap (30d)' });
-
-			const heatmapGrid = heatmapSection.createDiv('heatmap-grid');
-			heatmapGrid.style.display = 'flex';
-			heatmapGrid.style.flexWrap = 'wrap';
-			heatmapGrid.style.gap = '6px';
-
-			// Determine per-day all-complete status. Arrays are ordered oldest..today
-			const days = this.habitData[0].completions.length;
-			for (let i = 0; i < days; i++) {
-				// date from first habit's completions (all habits share the same date positions)
-				const dateStr = this.habitData[0].completions[i]?.date || '';
-				const allDone = this.habitData.every(h => h.completions[i] && h.completions[i].completed);
-
-				const dayEl = heatmapGrid.createDiv('heatmap-day');
-				dayEl.style.width = '12px';
-				dayEl.style.height = '12px';
-				dayEl.style.borderRadius = '3px';
-				dayEl.title = `${dateStr} — ${allDone ? 'All habits complete' : 'Incomplete'}`;
-				dayEl.style.background = allDone ? '#2ECC71' : '#E6E6E6';
-				dayEl.style.border = '1px solid rgba(0,0,0,0.06)';
-				dayEl.style.boxSizing = 'border-box';
-				heatmapGrid.appendChild(dayEl);
-			}
-		}
-
 		// Individual habit statistics
 		for (const habit of this.habitData) {
 			if (!habit.name.trim()) continue;
@@ -228,14 +199,14 @@ export class HabitTrackerView extends ItemView {
 				cls: 'progress-text'
 			});
 
-			// Recent activity (last 7 days)
+			// Recent activity (last 3 days)
 			const recentActivity = habitCard.createDiv('recent-activity');
-			recentActivity.createEl('h5', { text: 'Last 7 Days' });
+			recentActivity.createEl('h5', { text: 'Last 3 Days' });
 			
 			const activityGrid = recentActivity.createDiv('activity-grid');
-			const last7Days = habit.completions.slice(-7);
+			const last3Days = habit.completions.slice(-3);
 			
-			for (const completion of last7Days) {
+			for (const completion of last3Days) {
 				const dayEl = activityGrid.createDiv('activity-day');
 				const date = new Date(completion.date);
 				dayEl.createEl('div', { 
