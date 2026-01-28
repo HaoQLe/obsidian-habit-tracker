@@ -104,15 +104,22 @@ export class HabitTrackerView extends ItemView {
 
 			const habitItem = habitsList.createDiv('habit-checklist-item');
 			
+			// Get today's status first
+			const today = habit.completions[habit.completions.length - 1];
+			const isCompleted = today?.completed || false;
+			
+			// Apply incomplete class for visual styling
+			if (!isCompleted) {
+				habitItem.addClass('habit-incomplete');
+			}
+			
 			// Checkbox
 			const checkbox = habitItem.createEl('input', {
 				type: 'checkbox',
 				cls: 'habit-checkbox'
 			}) as HTMLInputElement;
 
-			// Get today's status
-			const today = habit.completions[habit.completions.length - 1];
-			checkbox.checked = today?.completed || false;
+			checkbox.checked = isCompleted;
 
 			// Label
 			const label = habitItem.createEl('label', { 
@@ -121,21 +128,60 @@ export class HabitTrackerView extends ItemView {
 			});
 			label.prepend(checkbox);
 
-			// Streak badge
+			// Value input for value-based habits
+			let valueInput: HTMLInputElement | null = null;
+			if (habit.isValueBased) {
+				// Get previous day's value for placeholder
+				let placeholderValue = 'value';
+				if (habit.completions.length >= 2) {
+					// Look for the most recent day with a value (excluding today)
+					for (let i = habit.completions.length - 2; i >= 0; i--) {
+						if (habit.completions[i].value) {
+							placeholderValue = String(habit.completions[i].value);
+							break;
+						}
+					}
+				}
+				
+				valueInput = habitItem.createEl('input', {
+					type: 'text',
+					cls: 'habit-value-input',
+					placeholder: placeholderValue
+				}) as HTMLInputElement;
+				// Only set actual value if today already has a value
+				valueInput.value = today?.value ? String(today.value) : '';
+			}
+
+			// Streak badge or broken streak indicator
+			const streakEl = habitItem.createDiv('habit-streak');
 			if (habit.currentStreak > 0) {
-				const streakEl = habitItem.createDiv('habit-streak');
 				streakEl.createEl('span', { 
 					text: `🔥 ${habit.currentStreak} day streak`,
 					cls: 'streak-text'
+				});
+			} else if (!isCompleted) {
+				streakEl.createEl('span', { 
+					text: '⚠️ NOT DONE',
+					cls: 'streak-text warning'
 				});
 			}
 
 			// Checkbox change handler
 			checkbox.addEventListener('change', async (e) => {
 				const target = e.target as HTMLInputElement;
-				await this.habitService.setHabitStatus(habit.name, target.checked);
+				const value = valueInput?.value;
+				await this.habitService.setHabitStatus(habit.name, target.checked, undefined, value);
 				await this.refresh();
 			});
+
+			// Value input change handler
+			if (valueInput) {
+				valueInput.addEventListener('change', async (e) => {
+					const target = e.target as HTMLInputElement;
+					await this.habitService.setHabitStatus(habit.name, checkbox.checked, undefined, target.value);
+					await this.refresh();
+				});
+			}
 		}
 
 		// Statistics Section
@@ -201,6 +247,10 @@ export class HabitTrackerView extends ItemView {
 
 			// Current streak
 			const streakCard = statsGrid.createDiv('stat-card');
+			const todayCompleted = habit.completions[habit.completions.length - 1]?.completed || false;
+			if (habit.currentStreak === 0 && !todayCompleted) {
+				streakCard.addClass('streak-broken');
+			}
 			streakCard.createEl('div', { text: 'Current Streak', cls: 'stat-label' });
 			streakCard.createEl('div', { 
 				text: `${habit.currentStreak} days`, 

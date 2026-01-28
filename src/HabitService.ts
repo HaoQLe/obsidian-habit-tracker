@@ -4,6 +4,7 @@ import { HabitTrackerSettings } from './settings';
 export interface HabitCompletion {
 	date: string; // YYYY-MM-DD
 	completed: boolean;
+	value?: string | number; // Optional value for value-based habits (e.g., weight, distance)
 }
 
 export interface HabitData {
@@ -13,6 +14,7 @@ export interface HabitData {
 	longestStreak: number;
 	completionRate: number;
 	totalDaysCompleted: number;
+	isValueBased?: boolean; // Whether this habit tracks a value
 }
 
 export class HabitService {
@@ -67,28 +69,36 @@ export class HabitService {
 	}
 
 	/**
-	 * Get habit completion status for a specific date
+	 * Get habit completion status and value for a specific date
 	 */
-	async getHabitStatus(habitName: string, date: string = moment().format(this.settings.dateFormat)): Promise<boolean> {
+	async getHabitStatus(habitName: string, date: string = moment().format(this.settings.dateFormat)): Promise<{ completed: boolean; value?: string | number }> {
 		const fileName = `${date}.md`;
 		const filePath = this.getFilePath(fileName);
 		
 		const file = this.app.vault.getAbstractFileByPath(filePath);
 		if (!file || !(file instanceof TFile)) {
-			return false;
+			return { completed: false };
 		}
 
 		const content = await this.app.vault.read(file);
-		const habitPattern = new RegExp(`- \\[([ x])\\] ${this.escapeRegex(habitName)}`, 'i');
+		// Match checkbox with optional value: - [x] Habit Name (value: 165)
+		const habitPattern = new RegExp(`- \\[([ x])\\] ${this.escapeRegex(habitName)}(?: \\(value: ([^)]+)\\))?`, 'i');
 		const match = content.match(habitPattern);
 		
-		return match ? match[1].toLowerCase() === 'x' : false;
+		if (match) {
+			return {
+				completed: match[1].toLowerCase() === 'x',
+				value: match[2] ? match[2].trim() : undefined
+			};
+		}
+		
+		return { completed: false };
 	}
 
 	/**
-	 * Set habit completion status for a specific date
+	 * Set habit completion status and optional value for a specific date
 	 */
-	async setHabitStatus(habitName: string, completed: boolean, date: string = moment().format(this.settings.dateFormat)): Promise<void> {
+	async setHabitStatus(habitName: string, completed: boolean, date: string = moment().format(this.settings.dateFormat), value?: string | number): Promise<void> {
 		const fileName = `${date}.md`;
 		const filePath = this.getFilePath(fileName);
 		
@@ -111,24 +121,25 @@ export class HabitService {
 
 		let content = await this.app.vault.read(file);
 		const checkbox = completed ? 'x' : ' ';
-		const habitPattern = new RegExp(`- \\[[ x]\\] ${this.escapeRegex(habitName)}`, 'i');
+		const valueStr = value !== undefined && value !== '' ? ` (value: ${value})` : '';
+		const newCheckboxLine = `- [${checkbox}] ${habitName}${valueStr}`;
+		const habitPattern = new RegExp(`- \\[[ x]\\] ${this.escapeRegex(habitName)}(?: \\(value: [^)]+\\))?`, 'i');
 		
 		if (habitPattern.test(content)) {
 			// Update existing checkbox
-			content = content.replace(habitPattern, `- [${checkbox}] ${habitName}`);
+			content = content.replace(habitPattern, newCheckboxLine);
 		} else {
 			// Add new checkbox
 			const habitSection = this.findOrCreateHabitSection(content);
-			const checkboxLine = `- [${checkbox}] ${habitName}`;
 			
 			if (habitSection.end === -1) {
 				// No habit section exists, add it
-				content = content + (content ? '\n\n' : '') + '## Habits\n\n' + checkboxLine + '\n';
+				content = content + (content ? '\n\n' : '') + '## Habits\n\n' + newCheckboxLine + '\n';
 			} else {
 				// Insert into existing section
 				const before = content.substring(0, habitSection.end);
 				const after = content.substring(habitSection.end);
-				content = before + checkboxLine + '\n' + after;
+				content = before + newCheckboxLine + '\n' + after;
 			}
 		}
 
@@ -160,8 +171,8 @@ export class HabitService {
 						? afterSection.substring(0, nextSectionMatch.index)
 						: afterSection;
 					
-					// Extract habit names from checkboxes
-					const checkboxPattern = /- \[[ x]\] (.+)$/gm;
+					// Extract habit names from checkboxes (excluding value part)
+					const checkboxPattern = /- \[[ x]\] ([^(]+?)(?:\s*\(value: [^)]+\))?$/gm;
 					let match;
 					while ((match = checkboxPattern.exec(sectionContent)) !== null) {
 						habits.add(match[1].trim());
@@ -189,6 +200,7 @@ export class HabitService {
 		for (const habitName of habitNames) {
 			if (!habitName.trim()) continue;
 			
+			const isValueBased = this.settings.habitsWithValues.includes(habitName);
 			const completions: HabitCompletion[] = [];
 			const today = moment();
 			
@@ -196,8 +208,12 @@ export class HabitService {
 			for (let i = 0; i < 30; i++) {
 				const date = today.clone().subtract(i, 'days');
 				const dateStr = date.format(this.settings.dateFormat);
-				const completed = await this.getHabitStatus(habitName, dateStr);
-				completions.unshift({ date: dateStr, completed });
+				const result = await this.getHabitStatus(habitName, dateStr);
+				completions.unshift({ 
+					date: dateStr, 
+					completed: result.completed,
+					value: result.value
+				});
 			}
 			
 			// Calculate streaks and statistics
@@ -211,7 +227,8 @@ export class HabitService {
 				currentStreak,
 				longestStreak,
 				completionRate,
-				totalDaysCompleted: completed
+				totalDaysCompleted: completed,
+				isValueBased
 			});
 		}
 		
@@ -267,7 +284,8 @@ export class HabitService {
 			: afterSection;
 
 		// Collect existing habit names in the section
-		const checkboxPattern = /- \[[ x]\] (.+)$/gm;
+		// Extract habit name only (before optional "(value: ...)" part)
+		const checkboxPattern = /- \[[ x]\] ([^(]+?)(?:\s*\(value: [^)]+\))?$/gm;
 		const existing = new Set<string>();
 		let m: RegExpExecArray | null;
 		while ((m = checkboxPattern.exec(sectionContent)) !== null) {
@@ -349,7 +367,8 @@ export class HabitService {
 		for (let i = 0; i < days; i++) {
 			const date = today.clone().subtract(i, 'days');
 			const dateStr = date.format(this.settings.dateFormat);
-			if (await this.getHabitStatus(habitName, dateStr)) {
+			const result = await this.getHabitStatus(habitName, dateStr);
+			if (result.completed) {
 				completed++;
 			}
 			total++;

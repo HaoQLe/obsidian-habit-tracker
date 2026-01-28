@@ -7,6 +7,7 @@ export interface HabitTrackerSettings {
 	autoDetectHabits: boolean;
 	streakMode: 'strict' | 'lenient';
 	collapseAnimation: 'smooth' | 'instant';
+	habitsWithValues: string[]; // Names of habits that track values
 }
 
 export const DEFAULT_SETTINGS: HabitTrackerSettings = {
@@ -16,6 +17,7 @@ export const DEFAULT_SETTINGS: HabitTrackerSettings = {
 	autoDetectHabits: false,
 	streakMode: 'strict',
 	collapseAnimation: 'smooth',
+	habitsWithValues: [],
 }
 
 export class HabitTrackerSettingTab extends PluginSettingTab {
@@ -127,13 +129,39 @@ export class HabitTrackerSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				});
 
+				// Value tracking checkbox
+				const valueCheckboxWrapper = habitItemEl.createDiv('habit-value-checkbox-wrapper');
+				const valueCheckbox = valueCheckboxWrapper.createEl('input', {
+					type: 'checkbox',
+					cls: 'habit-value-checkbox',
+					title: 'Track value for this habit'
+				}) as HTMLInputElement;
+				valueCheckbox.checked = this.plugin.settings.habitsWithValues.includes(habit);
+				
+				const valueLabel = valueCheckboxWrapper.createEl('label', { 
+					text: 'Track value',
+					cls: 'habit-value-label'
+				});
+				valueLabel.prepend(valueCheckbox);
+
+				valueCheckbox.addEventListener('change', async () => {
+					if (valueCheckbox.checked && habit && !this.plugin.settings.habitsWithValues.includes(habit)) {
+						this.plugin.settings.habitsWithValues.push(habit);
+					} else if (!valueCheckbox.checked && habit) {
+						this.plugin.settings.habitsWithValues = this.plugin.settings.habitsWithValues.filter(h => h !== habit);
+					}
+					await this.plugin.saveSettings();
+				});
+
 				const deleteBtn = habitItemEl.createEl('button', {
 					cls: 'habit-delete-btn',
 					text: '×',
 				});
 
 				deleteBtn.addEventListener('click', async () => {
+					const deletingHabit = this.plugin.settings.habits[index];
 					this.plugin.settings.habits.splice(index, 1);
+					this.plugin.settings.habitsWithValues = this.plugin.settings.habitsWithValues.filter(h => h !== deletingHabit);
 					await this.plugin.saveSettings();
 					this.display();
 				});

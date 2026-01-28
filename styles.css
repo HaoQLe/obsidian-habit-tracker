@@ -56,11 +56,23 @@
 	background: var(--background-secondary);
 	border-radius: 6px;
 	border: 1px solid var(--background-modifier-border);
-	transition: background-color 0.2s;
+	transition: background-color 0.2s, border-color 0.2s;
 }
 
 .habit-checklist-item:hover {
 	background: var(--background-modifier-hover);
+}
+
+/* Incomplete habits - more prominent styling */
+.habit-checklist-item.habit-incomplete {
+	border-color: #ff6b6b;
+	border-width: 2px;
+	background: rgba(255, 107, 107, 0.08);
+}
+
+.habit-checklist-item.habit-incomplete:hover {
+	background: rgba(255, 107, 107, 0.15);
+	border-color: #ff5252;
 }
 
 .habit-checkbox {
@@ -83,10 +95,49 @@
 	margin-left: auto;
 }
 
+.habit-value-input {
+	padding: 6px 8px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	color: var(--text-normal);
+	font-family: inherit;
+	font-size: 0.9em;
+	width: 80px;
+	text-align: center;
+}
+
+.habit-value-input:focus {
+	outline: none;
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.1);
+}
+
 .streak-text {
 	color: var(--text-accent);
 	font-weight: 600;
 	font-size: 0.9em;
+}
+
+.streak-text.warning {
+	color: #ff6b6b;
+	font-weight: 700;
+	font-size: 0.95em;
+}
+
+/* Broken streak - red styling for stat card */
+.stat-card.streak-broken {
+	border-color: #ff6b6b;
+	border-width: 2px;
+	background: rgba(255, 107, 107, 0.12);
+}
+
+.stat-card.streak-broken .stat-value {
+	color: #ff6b6b;
+}
+
+.stat-card.streak-broken .stat-label {
+	color: #ff6b6b;
 }
 
 /* Statistics Section */
@@ -357,6 +408,31 @@
 
 .habit-input-wrapper {
 	flex: 1;
+}
+
+.habit-value-checkbox-wrapper {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-shrink: 0;
+}
+
+.habit-value-checkbox {
+	width: 16px;
+	height: 16px;
+	cursor: pointer;
+	accent-color: var(--interactive-accent);
+}
+
+.habit-value-label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+	font-size: 0.9em;
+	color: var(--text-muted);
+	margin: 0;
+	padding: 0;
 }
 
 .habit-input {
