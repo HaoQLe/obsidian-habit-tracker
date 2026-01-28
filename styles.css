@@ -3,8 +3,9 @@
 	padding: 20px;
 	min-width: 400px;
 	min-height: 600px;
-	max-width: 400px;
-	max-height: 600px;
+	max-width: 100%;
+	width: 100%;
+	height: 100%;
 }
 
 .habit-tracker-header {
@@ -14,15 +15,19 @@
 	margin-bottom: 20px;
 	padding-bottom: 15px;
 	border-bottom: 2px solid var(--background-modifier-border);
+	gap: 15px;
+	flex-wrap: wrap;
 }
 
 .habit-tracker-header h2 {
 	margin: 0;
+	margin-right: auto;
 }
 
 .habit-tracker-date {
 	color: var(--text-muted);
 	font-size: 0.9em;
+	margin-right: auto;
 }
 
 .habit-tracker-empty {
@@ -473,4 +478,184 @@
 	background: var(--background-modifier-border);
 	color: var(--text-error);
 	border-color: var(--text-error);
+}
+/* Insert Calendar Button */
+.insert-calendar-btn {
+	padding: 6px 12px;
+	background: var(--interactive-accent);
+	border: none;
+	border-radius: 4px;
+	color: var(--text-on-accent);
+	cursor: pointer;
+	font-size: 0.9em;
+	font-weight: 500;
+	margin-right: 8px;
+	transition: opacity 0.2s ease;
+}
+
+.insert-calendar-btn:hover {
+	opacity: 0.85;
+}
+
+.habit-selector-bar {
+	display: flex;
+	align-items: center;
+	gap: 15px;
+	padding: 12px 15px;
+	background: var(--background-secondary);
+	border-radius: 6px;
+	border: 1px solid var(--background-modifier-border);
+	margin-bottom: 20px;
+	flex-wrap: wrap;
+	flex-shrink: 0;
+}
+
+.selector-label {
+	font-weight: 600;
+	color: var(--text-normal);
+	font-size: 0.95em;
+}
+
+.selector-checkboxes {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	flex: 1;
+}
+
+.habit-selector-checkbox {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+	font-size: 0.9em;
+	color: var(--text-normal);
+	padding: 4px 8px;
+	border-radius: 4px;
+	transition: background-color 0.2s ease;
+}
+
+.habit-selector-checkbox:hover {
+	background: var(--background-modifier-hover);
+}
+
+.habit-selector-checkbox input[type="checkbox"] {
+	width: 16px;
+	height: 16px;
+	cursor: pointer;
+	accent-color: var(--interactive-accent);
+}
+
+.selector-buttons {
+	display: flex;
+	gap: 8px;
+}
+
+.selector-btn {
+	padding: 6px 12px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	color: var(--text-normal);
+	cursor: pointer;
+	font-size: 0.85em;
+	transition: all 0.2s ease;
+}
+
+.selector-btn:hover {
+	background: var(--background-modifier-hover);
+	border-color: var(--interactive-accent);
+}
+
+.habit-calendar-container {
+	width: 100%;
+	overflow-x: auto;
+	flex: 1;
+	min-height: 0;
+}
+
+.habit-calendar-grid {
+	display: grid;
+	gap: 2px;
+	background: var(--background-modifier-border);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	overflow: hidden;
+	min-width: 600px;
+}
+
+.calendar-header-cell {
+	background: var(--background-secondary);
+	padding: 12px 8px;
+	text-align: center;
+	font-weight: 700;
+	font-size: 0.9em;
+	color: var(--text-normal);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.calendar-header-cell.empty {
+	background: var(--background-primary);
+}
+
+.calendar-date-cell {
+	background: var(--background-secondary);
+	padding: 8px;
+	text-align: center;
+	font-weight: 600;
+	font-size: 1.1em;
+	color: var(--text-muted);
+}
+
+.calendar-date-cell.empty {
+	background: var(--background-primary);
+}
+
+.calendar-date-cell.today {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-radius: 4px;
+}
+
+.calendar-habit-name {
+	background: var(--background-secondary);
+	padding: 12px;
+	font-weight: 600;
+	color: var(--text-normal);
+	display: flex;
+	align-items: center;
+	border-right: 2px solid var(--background-modifier-border);
+}
+
+.calendar-checkbox-cell {
+	background: var(--background-primary);
+	padding: 8px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: background-color 0.2s ease;
+}
+
+.calendar-checkbox-cell:hover {
+	background: var(--background-modifier-hover);
+}
+
+.calendar-checkbox {
+	width: 24px;
+	height: 24px;
+	cursor: pointer;
+	accent-color: var(--interactive-accent);
+}
+
+/* Alternating week colors - apply to rows */
+.habit-calendar-grid .calendar-habit-name:nth-of-type(8n+1),
+.habit-calendar-grid .calendar-checkbox-cell:nth-of-type(8n+2),
+.habit-calendar-grid .calendar-checkbox-cell:nth-of-type(8n+3),
+.habit-calendar-grid .calendar-checkbox-cell:nth-of-type(8n+4),
+.habit-calendar-grid .calendar-checkbox-cell:nth-of-type(8n+5),
+.habit-calendar-grid .calendar-checkbox-cell:nth-of-type(8n+6),
+.habit-calendar-grid .calendar-checkbox-cell:nth-of-type(8n+7),
+.habit-calendar-grid .calendar-checkbox-cell:nth-of-type(8n+8) {
+	background: rgba(255, 182, 193, 0.15);
 }

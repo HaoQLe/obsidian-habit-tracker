@@ -16,7 +16,7 @@ export default class HabitTrackerPlugin extends Plugin {
 		// Register view
 		this.registerView(
 			VIEW_TYPE_HABIT_TRACKER,
-			(leaf) => new HabitTrackerView(leaf, this.habitService, this.settings)
+			(leaf) => new HabitTrackerView(leaf, this.habitService, this.settings, () => this.saveSettings())
 		);
 
 		// Add ribbon icon
@@ -41,6 +41,11 @@ export default class HabitTrackerPlugin extends Plugin {
 
 		// Add toggle commands for each habit
 		this.addCommandsForHabits();
+
+		// Register code block processor for embedding calendar in notes
+		this.registerMarkdownCodeBlockProcessor('habit-calendar', async (source, el, ctx) => {
+			await this.renderCalendarCodeBlock(el);
+		});
 
 		// Settings tab
 		this.addSettingTab(new HabitTrackerSettingTab(this.app, this));
@@ -112,6 +117,152 @@ export default class HabitTrackerPlugin extends Plugin {
 					}
 				}
 			});
+		}
+	}
+
+	private async renderCalendarCodeBlock(container: HTMLElement) {
+		const moment = (window as any).moment;
+		
+		// Get habit data
+		const habitData = await this.habitService.getAllHabitData();
+		
+		if (habitData.length === 0) {
+			container.createEl('p', { 
+				text: 'No habits configured. Go to Settings to add habits or enable auto-detection.',
+				cls: 'habit-tracker-empty'
+			});
+			return;
+		}
+
+		// Filter visible habits
+		const selectedHabits = this.settings.calendarVisibleHabits.length === 0 
+			? habitData.map(h => h.name)
+			: this.settings.calendarVisibleHabits;
+		const visibleHabits = habitData.filter(habit => selectedHabits.includes(habit.name));
+
+		// Habit selector bar
+		const selectorBar = container.createDiv('habit-selector-bar');
+		selectorBar.createEl('span', { text: 'Show habits:', cls: 'selector-label' });
+
+		const selectorCheckboxes = selectorBar.createDiv('selector-checkboxes');
+		
+		for (const habit of habitData) {
+			const label = selectorCheckboxes.createEl('label', { cls: 'habit-selector-checkbox' });
+			const checkbox = label.createEl('input', { type: 'checkbox' }) as HTMLInputElement;
+			checkbox.checked = selectedHabits.includes(habit.name);
+			label.appendText(habit.name);
+
+			checkbox.addEventListener('change', async () => {
+				if (checkbox.checked) {
+					if (this.settings.calendarVisibleHabits.length === 0) {
+						this.settings.calendarVisibleHabits = habitData.map(h => h.name);
+					}
+					if (!this.settings.calendarVisibleHabits.includes(habit.name)) {
+						this.settings.calendarVisibleHabits.push(habit.name);
+					}
+				} else {
+					if (this.settings.calendarVisibleHabits.length === 0) {
+						this.settings.calendarVisibleHabits = habitData.map(h => h.name);
+					}
+					this.settings.calendarVisibleHabits = this.settings.calendarVisibleHabits.filter(h => h !== habit.name);
+				}
+				await this.saveSettings();
+				// Re-render
+				container.empty();
+				await this.renderCalendarCodeBlock(container);
+			});
+		}
+
+		const selectorButtons = selectorBar.createDiv('selector-buttons');
+		const selectAllBtn = selectorButtons.createEl('button', { text: 'Select All', cls: 'selector-btn' });
+		selectAllBtn.addEventListener('click', async () => {
+			this.settings.calendarVisibleHabits = [];
+			await this.saveSettings();
+			container.empty();
+			await this.renderCalendarCodeBlock(container);
+		});
+
+		const clearAllBtn = selectorButtons.createEl('button', { text: 'Clear All', cls: 'selector-btn' });
+		clearAllBtn.addEventListener('click', async () => {
+			this.settings.calendarVisibleHabits = habitData.map(h => h.name);
+			await this.saveSettings();
+			container.empty();
+			await this.renderCalendarCodeBlock(container);
+		});
+
+		if (visibleHabits.length === 0) {
+			container.createEl('p', { 
+				text: 'No habits selected. Please select habits from the list above.',
+				cls: 'habit-tracker-empty'
+			});
+			return;
+		}
+
+		// Build calendar grid
+		const today = moment();
+		const startOfWeek = moment().startOf('isoWeek');
+		const endOfWeek = moment().endOf('isoWeek');
+
+		const dates: Array<{ dateString: string; dayOfMonth: string; isToday: boolean }> = [];
+		const current = startOfWeek.clone();
+		while (current.isSameOrBefore(endOfWeek, 'day')) {
+			dates.push({
+				dateString: current.format(this.settings.dateFormat),
+				dayOfMonth: current.format('D'),
+				isToday: current.isSame(today, 'day')
+			});
+			current.add(1, 'day');
+		}
+
+		// Render calendar grid
+		const calendarContainer = container.createDiv('habit-calendar-container');
+		const grid = calendarContainer.createDiv('habit-calendar-grid');
+		grid.style.gridTemplateColumns = 'minmax(150px, 200px) repeat(7, 1fr)';
+
+		// Header row
+		grid.createDiv('calendar-header-cell empty');
+		const dayNames = ['M', 'Tu', 'W', 'Th', 'F', 'Sa', 'Su'];
+		for (const dayName of dayNames) {
+			const dayHeader = grid.createDiv('calendar-header-cell');
+			dayHeader.setText(dayName);
+		}
+
+		// Date row
+		grid.createDiv('calendar-date-cell empty');
+		for (const date of dates) {
+			const dateCell = grid.createDiv('calendar-date-cell');
+			dateCell.setText(date.dayOfMonth);
+			if (date.isToday) {
+				dateCell.addClass('today');
+			}
+		}
+
+		// Habit rows
+		for (const habit of visibleHabits) {
+			const nameCell = grid.createDiv('calendar-habit-name');
+			nameCell.setText(habit.name);
+
+			for (const date of dates) {
+				const checkboxCell = grid.createDiv('calendar-checkbox-cell');
+				const completion = habit.completions.find(c => c.date === date.dateString);
+				const isCompleted = completion?.completed || false;
+
+				const checkbox = checkboxCell.createEl('input', {
+					type: 'checkbox',
+					cls: 'calendar-checkbox'
+				}) as HTMLInputElement;
+				checkbox.checked = isCompleted;
+				checkbox.setAttribute('data-habit', habit.name);
+				checkbox.setAttribute('data-date', date.dateString);
+
+				checkbox.addEventListener('change', async (e) => {
+					const target = e.target as HTMLInputElement;
+					const habitName = target.getAttribute('data-habit')!;
+					const dateString = target.getAttribute('data-date')!;
+					await this.habitService.setHabitStatus(habitName, target.checked, dateString);
+					checkbox.checked = target.checked;
+				});
+			}
 		}
 	}
 }

@@ -8,6 +8,7 @@ export interface HabitTrackerSettings {
 	streakMode: 'strict' | 'lenient';
 	collapseAnimation: 'smooth' | 'instant';
 	habitsWithValues: string[]; // Names of habits that track values
+	calendarVisibleHabits: string[]; // Habits visible in calendar view (empty = all)
 }
 
 export const DEFAULT_SETTINGS: HabitTrackerSettings = {
@@ -18,6 +19,7 @@ export const DEFAULT_SETTINGS: HabitTrackerSettings = {
 	streakMode: 'strict',
 	collapseAnimation: 'smooth',
 	habitsWithValues: [],
+	calendarVisibleHabits: [],
 }
 
 export class HabitTrackerSettingTab extends PluginSettingTab {

@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { ItemView, WorkspaceLeaf, moment } from 'obsidian';
 import { HabitService, HabitData } from './HabitService';
 import { HabitTrackerSettings } from './settings';
 
@@ -10,11 +10,13 @@ export class HabitTrackerView extends ItemView {
 	private habitData: HabitData[] = [];
 	private isRefreshing = false;
 	private collapsedHabits: Set<string> = new Set();
+	private saveSettings: () => Promise<void>;
 
-	constructor(leaf: WorkspaceLeaf, habitService: HabitService, settings: HabitTrackerSettings) {
+	constructor(leaf: WorkspaceLeaf, habitService: HabitService, settings: HabitTrackerSettings, saveSettings: () => Promise<void>) {
 		super(leaf);
 		this.habitService = habitService;
 		this.settings = settings;
+		this.saveSettings = saveSettings;
 	}
 
 	getViewType() {
@@ -71,6 +73,15 @@ export class HabitTrackerView extends ItemView {
 				month: 'long', 
 				day: 'numeric' 
 			}) 
+		});
+
+		// Insert Calendar button
+		const insertCalendarBtn = header.createEl('button', {
+			text: '📅 Insert Calendar',
+			cls: 'insert-calendar-btn'
+		});
+		insertCalendarBtn.addEventListener('click', async () => {
+			await this.insertCalendarIntoNote();
 		});
 
 		// Refresh button
@@ -302,5 +313,50 @@ export class HabitTrackerView extends ItemView {
 				});
 			}
 		}
+	}
+
+	private async insertCalendarIntoNote() {
+		const { vault, workspace } = this.app;
+		const today = moment().format(this.settings.dateFormat);
+		const folder = this.settings.dailyNotesFolder;
+		const fileName = `${today}.md`;
+		const filePath = folder ? `${folder}/${fileName}` : fileName;
+		
+		// Get or create today's note
+		let file = vault.getAbstractFileByPath(filePath);
+		
+		if (!file) {
+			// Create the file if it doesn't exist
+			if (folder) {
+				const folderExists = vault.getAbstractFileByPath(folder);
+				if (!folderExists) {
+					await vault.createFolder(folder);
+				}
+			}
+			file = await vault.create(filePath, `# ${today}\n\n`);
+		}
+		
+		if (file instanceof this.app.vault.adapter.constructor) {
+			return;
+		}
+		
+		// Read current content
+		const content = await vault.read(file as any);
+		
+		// Check if calendar block already exists
+		if (content.includes('```habit-calendar')) {
+			// Open the file
+			const leaf = workspace.getLeaf(false);
+			await leaf.openFile(file as any);
+			return;
+		}
+		
+		// Add calendar block at the end
+		const newContent = content + '\n\n```habit-calendar\n```\n';
+		await vault.modify(file as any, newContent);
+		
+		// Open the file
+		const leaf = workspace.getLeaf(false);
+		await leaf.openFile(file as any);
 	}
 }
