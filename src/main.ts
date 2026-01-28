@@ -30,7 +30,13 @@ export default class HabitTrackerPlugin extends Plugin {
 			name: 'Open Habit Tracker',
 			callback: () => {
 				this.openHabitTrackerView();
-			}
+			},
+			hotkeys: [
+				{
+					modifiers: ['Mod'],
+					key: 'h',
+				},
+			],
 		});
 
 		// Add toggle commands for each habit
@@ -63,12 +69,21 @@ export default class HabitTrackerPlugin extends Plugin {
 		const { workspace } = this.app;
 		let leaf = workspace.getLeavesOfType(VIEW_TYPE_HABIT_TRACKER)[0];
 		
-		if (!leaf) {
+		if (leaf) {
+			// View exists - check if it's focused
+			if (leaf.getDisplayText() === workspace.activeLeaf?.getDisplayText()) {
+				// Close it by detaching the leaf
+				leaf.detach();
+			} else {
+				// Reveal it if not focused
+				workspace.revealLeaf(leaf);
+			}
+		} else {
+			// Create new view
 			leaf = workspace.getRightLeaf(false);
 			await leaf.setViewState({ type: VIEW_TYPE_HABIT_TRACKER, active: true });
+			workspace.revealLeaf(leaf);
 		}
-		
-		workspace.revealLeaf(leaf);
 	}
 
 	/**
