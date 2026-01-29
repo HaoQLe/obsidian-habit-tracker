@@ -184,7 +184,9 @@ export default class HabitTrackerPlugin extends Plugin {
 
 		const clearAllBtn = selectorButtons.createEl('button', { text: 'Clear All', cls: 'selector-btn' });
 		clearAllBtn.addEventListener('click', async () => {
-			this.settings.calendarVisibleHabits = habitData.map(h => h.name);
+			// Clear all habit selections (uncheck all from "Show habits")
+			// Use a marker value to indicate "show none"
+			this.settings.calendarVisibleHabits = ['__NONE__'];
 			await this.saveSettings();
 			container.empty();
 			await this.renderCalendarCodeBlock(container);

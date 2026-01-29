@@ -378,6 +378,30 @@ export class HabitService {
 	}
 
 	/**
+	 * Clear all habits for a specific date (uncheck all)
+	 */
+	async clearAllHabitsForDate(date: string = moment().format(this.settings.dateFormat)): Promise<void> {
+		const fileName = `${date}.md`;
+		const filePath = this.getFilePath(fileName);
+		
+		const file = this.app.vault.getAbstractFileByPath(filePath);
+		if (!file || !(file instanceof TFile)) {
+			return; // No file to clear
+		}
+
+		let content = await this.app.vault.read(file);
+		
+		// Find all habit checkboxes and uncheck them (preserve any values)
+		// Pattern: - [x] Habit Name (optional: (value: xxx))
+		const checkboxPattern = /- \[x\] ([^(]+?)(\s*\(value: [^)]+\))?$/gm;
+		content = content.replace(checkboxPattern, (match, habitName, valuePart) => {
+			return `- [ ] ${habitName}${valuePart || ''}`;
+		});
+
+		await this.app.vault.modify(file, content);
+	}
+
+	/**
 	 * Find or create Habits section in content
 	 */
 	private findOrCreateHabitSection(content: string): { start: number; end: number } {
