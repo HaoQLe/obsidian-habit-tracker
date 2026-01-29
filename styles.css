@@ -479,8 +479,9 @@
 	color: var(--text-error);
 	border-color: var(--text-error);
 }
-/* Insert Calendar Button */
-.insert-calendar-btn {
+/* Insert Calendar and Chart Buttons */
+.insert-calendar-btn,
+.insert-chart-btn {
 	padding: 6px 12px;
 	background: var(--interactive-accent);
 	border: none;
@@ -493,7 +494,8 @@
 	transition: opacity 0.2s ease;
 }
 
-.insert-calendar-btn:hover {
+.insert-calendar-btn:hover,
+.insert-chart-btn:hover {
 	opacity: 0.85;
 }
 
@@ -658,4 +660,49 @@
 .habit-calendar-grid .calendar-checkbox-cell:nth-of-type(8n+7),
 .habit-calendar-grid .calendar-checkbox-cell:nth-of-type(8n+8) {
 	background: rgba(255, 182, 193, 0.15);
+}
+
+/* Value Chart Styles */
+.value-chart-container {
+	margin: 20px 0;
+	padding: 15px;
+	background: var(--background-secondary);
+	border-radius: 8px;
+	border: 1px solid var(--background-modifier-border);
+}
+
+.value-chart-title {
+	margin: 0 0 15px 0;
+	color: var(--text-normal);
+	font-size: 16px;
+	font-weight: 600;
+	text-align: center;
+}
+
+.value-line-chart {
+	display: block;
+	margin: 0 auto;
+}
+
+.value-chart-empty {
+	text-align: center;
+	color: var(--text-muted);
+	font-size: 0.9em;
+	padding: 20px;
+	margin: 0;
+}
+
+.chart-point {
+	cursor: pointer;
+	transition: r 0.2s ease;
+}
+
+.chart-point:hover {
+	r: 6;
+	stroke: var(--background-primary);
+	stroke-width: 2;
+}
+
+.chart-label {
+	font-family: var(--font-interface);
 }

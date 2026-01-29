@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, moment } from 'obsidian';
+import { ItemView, WorkspaceLeaf, moment, SuggestModal, App, Notice } from 'obsidian';
 import { HabitService, HabitData } from './HabitService';
 import { HabitTrackerSettings } from './settings';
 
@@ -82,6 +82,15 @@ export class HabitTrackerView extends ItemView {
 		});
 		insertCalendarBtn.addEventListener('click', async () => {
 			await this.insertCalendarIntoNote();
+		});
+
+		// Insert Chart button
+		const insertChartBtn = header.createEl('button', {
+			text: '📊 Insert Chart',
+			cls: 'insert-chart-btn'
+		});
+		insertChartBtn.addEventListener('click', async () => {
+			await this.insertChartIntoNote();
 		});
 
 		// Refresh button
@@ -358,5 +367,258 @@ export class HabitTrackerView extends ItemView {
 		// Open the file
 		const leaf = workspace.getLeaf(false);
 		await leaf.openFile(file as any);
+	}
+
+	private async insertChartIntoNote() {
+		// Get all value-based habits
+		const valueHabits = this.habitData.filter(h => h.isValueBased);
+		
+		if (valueHabits.length === 0) {
+			// No value-based habits available
+			new Notice('No value-based habits found. Mark habits as "Track value" in settings.');
+			return;
+		}
+		
+		// Show modal to select habit
+		new HabitChartSelectorModal(this.app, valueHabits, async (selectedHabit) => {
+			const { vault, workspace } = this.app;
+			const today = (window as any).moment().format(this.settings.dateFormat);
+			const folder = this.settings.dailyNotesFolder;
+			const fileName = `${today}.md`;
+			const filePath = folder ? `${folder}/${fileName}` : fileName;
+			
+			// Get or create today's note
+			let file = vault.getAbstractFileByPath(filePath);
+			
+			if (!file) {
+				if (folder) {
+					const folderExists = vault.getAbstractFileByPath(folder);
+					if (!folderExists) {
+						await vault.createFolder(folder);
+					}
+				}
+				file = await vault.create(filePath, `# ${today}\n\n`);
+			}
+			
+			// Read current content
+			const content = await vault.read(file as any);
+			
+			// Add chart block at the end with selected habit
+			const newContent = content + `\n\n\`\`\`habit-chart\nhabit: ${selectedHabit}\n\`\`\`\n`;
+			await vault.modify(file as any, newContent);
+			
+			// Open the file
+			const leaf = workspace.getLeaf(false);
+			await leaf.openFile(file as any);
+		}).open();
+	}
+
+	async renderChartCodeBlock(el: HTMLElement, habitName: string) {
+		const container = el.createDiv('value-chart-container');
+		
+		if (!habitName || habitName === 'HabitName') {
+			container.createEl('p', { 
+				text: 'Please specify a habit name in the chart block',
+				cls: 'value-chart-empty'
+			});
+			return;
+		}
+		
+		// Get all habit data
+		const allHabitData = await this.habitService.getAllHabitData();
+		const habit = allHabitData.find(h => h.name === habitName);
+		
+		if (!habit) {
+			container.createEl('p', { 
+				text: `Habit "${habitName}" not found`,
+				cls: 'value-chart-empty'
+			});
+			return;
+		}
+		
+		// Filter data to configured window and only include values
+		const daysWindow = this.settings.chartDaysWindow || 7;
+		const data = habit.completions
+			.filter(c => c.value !== undefined && c.completed)
+			.slice(-daysWindow)
+			.map(c => ({
+				date: (window as any).moment(c.date).format('MMM D'),
+				day: (window as any).moment(c.date).format('ddd, MMM D'),
+				value: parseFloat(String(c.value)),
+				rawValue: String(c.value)
+			}));
+		
+		if (data.length < 2) {
+			container.createEl('p', { 
+				text: 'Not enough data for graph (need at least 2 data points)',
+				cls: 'value-chart-empty'
+			});
+			return;
+		}
+		
+		// Chart title
+		container.createEl('h4', { 
+			text: `${habitName} - Last ${daysWindow} Days`,
+			cls: 'value-chart-title'
+		});
+		
+		// Fixed dimensions
+		const width = 400;
+		const height = 150;
+		const padding = { top: 20, right: 20, bottom: 30, left: 40 };
+		
+		// Calculate scales (start Y axis at 0)
+		const yMin = 0;
+		const yMax = Math.max(...data.map(d => d.value));
+		const yRange = yMax - yMin || 1;
+		
+		const xScale = (i: number) => 
+			padding.left + (i / (data.length - 1)) * (width - padding.left - padding.right);
+		
+		const yScale = (value: number) =>
+			height - padding.bottom - ((value - yMin) / yRange) * (height - padding.top - padding.bottom);
+		
+		// Create SVG
+		const svg = container.createSvg('svg', {
+			attr: {
+				width: String(width),
+				height: String(height),
+				class: 'value-line-chart'
+			}
+		});
+		
+		// Draw Y axis
+		svg.createSvg('line', {
+			attr: {
+				x1: String(padding.left),
+				y1: String(padding.top),
+				x2: String(padding.left),
+				y2: String(height - padding.bottom),
+				stroke: 'var(--text-muted)',
+				'stroke-width': '1'
+			}
+		});
+		
+		// Draw X axis
+		svg.createSvg('line', {
+			attr: {
+				x1: String(padding.left),
+				y1: String(height - padding.bottom),
+				x2: String(width - padding.right),
+				y2: String(height - padding.bottom),
+				stroke: 'var(--text-muted)',
+				'stroke-width': '1'
+			}
+		});
+		
+		// Draw line
+		const pathData = data.map((d, i) => 
+			`${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(d.value)}`
+		).join(' ');
+		
+		svg.createSvg('path', {
+			attr: {
+				d: pathData,
+				fill: 'none',
+				stroke: 'var(--interactive-accent)',
+				'stroke-width': '2'
+			}
+		});
+		
+		// Draw points with titles for hover
+		data.forEach((d, i) => {
+			const circle = svg.createSvg('circle', {
+				attr: {
+					cx: String(xScale(i)),
+					cy: String(yScale(d.value)),
+					r: '4',
+					fill: 'var(--interactive-accent)',
+					class: 'chart-point'
+				}
+			});
+			
+			// Add title element for tooltip
+			const title = svg.createSvg('title');
+			title.textContent = `${d.day}: ${d.rawValue}`;
+			circle.appendChild(title);
+		});
+		
+		// Add Y-axis labels
+		svg.createSvg('text', {
+			attr: {
+				x: String(padding.left - 5),
+				y: String(yScale(yMax)),
+				'text-anchor': 'end',
+				'alignment-baseline': 'middle',
+				'font-size': '10',
+				fill: 'var(--text-muted)',
+				class: 'chart-label'
+			}
+		}).textContent = yMax.toFixed(1);
+		
+		svg.createSvg('text', {
+			attr: {
+				x: String(padding.left - 5),
+				y: String(yScale(yMin)),
+				'text-anchor': 'end',
+				'alignment-baseline': 'middle',
+				'font-size': '10',
+				fill: 'var(--text-muted)',
+				class: 'chart-label'
+			}
+		}).textContent = yMin.toFixed(1);
+		
+		// Add date labels (first and last)
+		if (data.length > 0) {
+			svg.createSvg('text', {
+				attr: {
+					x: String(xScale(0)),
+					y: String(height - padding.bottom + 15),
+					'text-anchor': 'start',
+					'font-size': '10',
+					fill: 'var(--text-muted)',
+					class: 'chart-label'
+				}
+			}).textContent = data[0].date;
+			
+			svg.createSvg('text', {
+				attr: {
+					x: String(xScale(data.length - 1)),
+					y: String(height - padding.bottom + 15),
+					'text-anchor': 'end',
+					'font-size': '10',
+					fill: 'var(--text-muted)',
+					class: 'chart-label'
+				}
+			}).textContent = data[data.length - 1].date;
+		}
+	}
+}
+
+// Modal for selecting which habit to chart
+class HabitChartSelectorModal extends SuggestModal<string> {
+	private habits: HabitData[];
+	private onSelect: (habit: string) => void;
+	
+	constructor(app: App, habits: HabitData[], onSelect: (habit: string) => void) {
+		super(app);
+		this.habits = habits;
+		this.onSelect = onSelect;
+		this.setPlaceholder('Select a habit to chart...');
+	}
+	
+	getSuggestions(query: string): string[] {
+		const lowerQuery = query.toLowerCase();
+		return this.habits
+			.map(h => h.name)
+			.filter(name => name.toLowerCase().includes(lowerQuery));
+	}
+	
+	renderSuggestion(habit: string, el: HTMLElement) {
+		el.createEl('div', { text: habit });
+	}
+	
+	onChooseSuggestion(habit: string, evt: MouseEvent | KeyboardEvent) {
+		this.onSelect(habit);
 	}
 }

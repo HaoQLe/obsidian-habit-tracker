@@ -47,6 +47,15 @@ export default class HabitTrackerPlugin extends Plugin {
 			await this.renderCalendarCodeBlock(el);
 		});
 
+		// Register code block processor for embedding value charts in notes
+		this.registerMarkdownCodeBlockProcessor('habit-chart', async (source, el, ctx) => {
+			const habitName = source.match(/habit:\s*(.+)/)?.[1]?.trim();
+			const view = this.app.workspace.getLeavesOfType(VIEW_TYPE_HABIT_TRACKER)[0]?.view as HabitTrackerView;
+			if (view) {
+				await view.renderChartCodeBlock(el, habitName || '');
+			}
+		});
+
 		// Settings tab
 		this.addSettingTab(new HabitTrackerSettingTab(this.app, this));
 	}

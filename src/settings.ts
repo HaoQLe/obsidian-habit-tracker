@@ -9,6 +9,7 @@ export interface HabitTrackerSettings {
 	collapseAnimation: 'smooth' | 'instant';
 	habitsWithValues: string[]; // Names of habits that track values
 	calendarVisibleHabits: string[]; // Habits visible in calendar view (empty = all)
+	chartDaysWindow: number; // Number of days to show in value charts (7, 14, or 30)
 }
 
 export const DEFAULT_SETTINGS: HabitTrackerSettings = {
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: HabitTrackerSettings = {
 	collapseAnimation: 'smooth',
 	habitsWithValues: [],
 	calendarVisibleHabits: [],
+	chartDaysWindow: 7,
 }
 
 export class HabitTrackerSettingTab extends PluginSettingTab {
@@ -96,6 +98,20 @@ export class HabitTrackerSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.collapseAnimation)
 				.onChange(async (value: 'smooth' | 'instant') => {
 					this.plugin.settings.collapseAnimation = value;
+					await this.plugin.saveSettings();
+				}));
+
+		// Chart days window setting
+		new Setting(containerEl)
+			.setName('Value chart time window')
+			.setDesc('Number of days to display in value-based habit charts')
+			.addDropdown(dropdown => dropdown
+				.addOption('7', '7 days (1 week)')
+				.addOption('14', '14 days (2 weeks)')
+				.addOption('30', '30 days (1 month)')
+				.setValue(String(this.plugin.settings.chartDaysWindow))
+				.onChange(async (value: string) => {
+					this.plugin.settings.chartDaysWindow = parseInt(value);
 					await this.plugin.saveSettings();
 				}));
 
