@@ -39,20 +39,37 @@ export default class HabitTrackerPlugin extends Plugin {
 			],
 		});
 
+		this.addCommand({
+			id: 'select-habit-tracker-date',
+			name: 'Select Habit Tracker Date',
+			callback: async () => {
+				const { workspace } = this.app;
+				let leaf = workspace.getLeavesOfType(VIEW_TYPE_HABIT_TRACKER)[0];
+				if (!leaf) {
+					leaf = workspace.getRightLeaf(false);
+					await leaf.setViewState({ type: VIEW_TYPE_HABIT_TRACKER, active: true });
+				}
+				workspace.revealLeaf(leaf);
+				const view = leaf.view as HabitTrackerView;
+				await view.promptForDateSelection();
+			}
+		});
+
 		// Add toggle commands for each habit
 		this.addCommandsForHabits();
 
 		// Register code block processor for embedding calendar in notes
 		this.registerMarkdownCodeBlockProcessor('habit-calendar', async (source, el, ctx) => {
-			await this.renderCalendarCodeBlock(el);
+			await this.renderCalendarCodeBlock(el, source);
 		});
 
 		// Register code block processor for embedding value charts in notes
 		this.registerMarkdownCodeBlockProcessor('habit-chart', async (source, el, ctx) => {
 			const habitName = source.match(/habit:\s*(.+)/)?.[1]?.trim();
+			const baseDate = source.match(/date:\s*(.+)/)?.[1]?.trim();
 			const view = this.app.workspace.getLeavesOfType(VIEW_TYPE_HABIT_TRACKER)[0]?.view as HabitTrackerView;
 			if (view) {
-				await view.renderChartCodeBlock(el, habitName || '');
+				await view.renderChartCodeBlock(el, habitName || '', baseDate);
 			}
 		});
 
@@ -129,11 +146,19 @@ export default class HabitTrackerPlugin extends Plugin {
 		}
 	}
 
-	private async renderCalendarCodeBlock(container: HTMLElement) {
+	private async renderCalendarCodeBlock(container: HTMLElement, source?: string) {
 		const moment = (window as any).moment;
+		const baseDate = source?.match(/date:\s*(.+)/)?.[1]?.trim();
+		const view = this.app.workspace.getLeavesOfType(VIEW_TYPE_HABIT_TRACKER)[0]?.view as HabitTrackerView | undefined;
+		const fallbackDate = view?.getSelectedDate();
+		const baseMoment = baseDate && moment(baseDate, this.settings.dateFormat, true).isValid()
+			? moment(baseDate, this.settings.dateFormat)
+			: (fallbackDate && moment(fallbackDate, this.settings.dateFormat, true).isValid()
+				? moment(fallbackDate, this.settings.dateFormat)
+				: moment());
 		
 		// Get habit data
-		const habitData = await this.habitService.getAllHabitData();
+		const habitData = await this.habitService.getAllHabitData(baseMoment.format(this.settings.dateFormat));
 		
 		if (habitData.length === 0) {
 			container.createEl('p', { 
@@ -178,7 +203,7 @@ export default class HabitTrackerPlugin extends Plugin {
 				await this.saveSettings();
 				// Re-render
 				container.empty();
-				await this.renderCalendarCodeBlock(container);
+				await this.renderCalendarCodeBlock(container, source);
 			});
 		}
 
@@ -188,7 +213,7 @@ export default class HabitTrackerPlugin extends Plugin {
 			this.settings.calendarVisibleHabits = [];
 			await this.saveSettings();
 			container.empty();
-			await this.renderCalendarCodeBlock(container);
+			await this.renderCalendarCodeBlock(container, source);
 		});
 
 		const clearAllBtn = selectorButtons.createEl('button', { text: 'Clear All', cls: 'selector-btn' });
@@ -198,7 +223,7 @@ export default class HabitTrackerPlugin extends Plugin {
 			this.settings.calendarVisibleHabits = ['__NONE__'];
 			await this.saveSettings();
 			container.empty();
-			await this.renderCalendarCodeBlock(container);
+			await this.renderCalendarCodeBlock(container, source);
 		});
 
 		if (visibleHabits.length === 0) {
@@ -210,9 +235,9 @@ export default class HabitTrackerPlugin extends Plugin {
 		}
 
 		// Build calendar grid
-		const today = moment();
-		const startOfWeek = moment().startOf('isoWeek');
-		const endOfWeek = moment().endOf('isoWeek');
+		const today = baseMoment.clone();
+		const startOfWeek = baseMoment.clone().startOf('isoWeek');
+		const endOfWeek = baseMoment.clone().endOf('isoWeek');
 
 		const dates: Array<{ dateString: string; dayOfMonth: string; isToday: boolean }> = [];
 		const current = startOfWeek.clone();

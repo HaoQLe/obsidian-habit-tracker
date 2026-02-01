@@ -47,11 +47,18 @@ export class HabitService {
 	 */
 	async ensureTodayFile(): Promise<TFile> {
 		const today = moment().format(this.settings.dateFormat);
-		const fileName = `${today}.md`;
+		return this.ensureDailyNoteForDate(today);
+	}
+
+	/**
+	 * Ensure daily note file exists for a specific date, create if it doesn't
+	 */
+	async ensureDailyNoteForDate(date: string): Promise<TFile> {
+		const fileName = `${date}.md`;
 		const filePath = this.getFilePath(fileName);
-		
+
 		let file = this.app.vault.getAbstractFileByPath(filePath);
-		
+
 		if (!file || !(file instanceof TFile)) {
 			// Create the folder if it doesn't exist
 			if (this.settings.dailyNotesFolder) {
@@ -60,11 +67,11 @@ export class HabitService {
 					await this.app.vault.createFolder(this.settings.dailyNotesFolder);
 				}
 			}
-			
-			// Create the file
-			file = await this.app.vault.create(filePath, '');
+
+			// Create the file with a simple header
+			file = await this.app.vault.create(filePath, `# ${date}\n\n`);
 		}
-		
+
 		return file as TFile;
 	}
 
@@ -99,25 +106,7 @@ export class HabitService {
 	 * Set habit completion status and optional value for a specific date
 	 */
 	async setHabitStatus(habitName: string, completed: boolean, date: string = moment().format(this.settings.dateFormat), value?: string | number): Promise<void> {
-		const fileName = `${date}.md`;
-		const filePath = this.getFilePath(fileName);
-		
-		let file = this.app.vault.getAbstractFileByPath(filePath);
-		
-		if (!file || !(file instanceof TFile)) {
-			// Create the file if it doesn't exist
-			if (this.settings.dailyNotesFolder) {
-				const folderExists = this.app.vault.getAbstractFileByPath(this.settings.dailyNotesFolder);
-				if (!folderExists) {
-					await this.app.vault.createFolder(this.settings.dailyNotesFolder);
-				}
-			}
-			file = await this.app.vault.create(filePath, '');
-		}
-
-		if (!(file instanceof TFile)) {
-			throw new Error('Failed to create or access daily note file');
-		}
+		const file = await this.ensureDailyNoteForDate(date);
 
 		let content = await this.app.vault.read(file);
 		const checkbox = completed ? 'x' : ' ';
@@ -149,9 +138,11 @@ export class HabitService {
 	/**
 	 * Auto-detect habits by scanning recent daily notes
 	 */
-	async autoDetectHabits(days: number = 30): Promise<string[]> {
+	async autoDetectHabits(days: number = 30, baseDate?: string): Promise<string[]> {
 		const habits = new Set<string>();
-		const today = moment();
+		const today = baseDate && moment(baseDate, this.settings.dateFormat, true).isValid()
+			? moment(baseDate, this.settings.dateFormat)
+			: moment();
 		
 		for (let i = 0; i < days; i++) {
 			const date = today.clone().subtract(i, 'days');
@@ -187,22 +178,26 @@ export class HabitService {
 	/**
 	 * Get all habit data including completions, streaks, and statistics
 	 */
-	async getAllHabitData(): Promise<HabitData[]> {
+	async getAllHabitData(baseDate?: string): Promise<HabitData[]> {
 		const habits: HabitData[] = [];
+		const baseMoment = baseDate && moment(baseDate, this.settings.dateFormat, true).isValid()
+			? moment(baseDate, this.settings.dateFormat)
+			: moment();
+		const baseDateStr = baseMoment.format(this.settings.dateFormat);
 		const habitNames = this.settings.autoDetectHabits 
-			? await this.autoDetectHabits()
+			? await this.autoDetectHabits(30, baseDateStr)
 			: this.settings.habits;
 
 		// Ensure today's daily note contains checkbox lines for all known habits
 		// so the checklist is present even when a habit hasn't been completed yet.
-		await this.ensureHabitsForDate(moment().format(this.settings.dateFormat));
+		await this.ensureHabitsForDate(baseDateStr);
 		
 		for (const habitName of habitNames) {
 			if (!habitName.trim()) continue;
 			
 			const isValueBased = this.settings.habitsWithValues.includes(habitName);
 			const completions: HabitCompletion[] = [];
-			const today = moment();
+			const today = baseMoment.clone();
 			
 			// Get data for the last 30 days
 			for (let i = 0; i < 30; i++) {
@@ -236,12 +231,36 @@ export class HabitService {
 	}
 
 	/**
+	 * List existing daily note dates in descending order (newest first)
+	 */
+	async getExistingDailyNoteDates(): Promise<string[]> {
+		const files = this.app.vault.getFiles();
+		const folderPrefix = this.settings.dailyNotesFolder
+			? `${this.settings.dailyNotesFolder}/`
+			: '';
+		const dates = new Set<string>();
+
+		for (const file of files) {
+			if (!file.path.endsWith('.md')) continue;
+			if (folderPrefix && !file.path.startsWith(folderPrefix)) continue;
+			const dateStr = file.basename;
+			if (moment(dateStr, this.settings.dateFormat, true).isValid()) {
+				dates.add(dateStr);
+			}
+		}
+
+		return Array.from(dates).sort((a, b) =>
+			moment(b, this.settings.dateFormat).valueOf() - moment(a, this.settings.dateFormat).valueOf()
+		);
+	}
+
+	/**
 	 * Ensure a given date's note contains checkbox entries for all habits.
 	 * If a checkbox is missing for a habit, insert an unchecked line (`- [ ] Habit`).
 	 */
 	async ensureHabitsForDate(date: string): Promise<void> {
 		const habitNames = this.settings.autoDetectHabits
-			? await this.autoDetectHabits()
+			? await this.autoDetectHabits(30, date)
 			: this.settings.habits;
 
 		if (!habitNames || habitNames.length === 0) return;
@@ -249,19 +268,7 @@ export class HabitService {
 		const fileName = `${date}.md`;
 		const filePath = this.getFilePath(fileName);
 
-		let file = this.app.vault.getAbstractFileByPath(filePath);
-		if (!file || !(file instanceof TFile)) {
-			// Create the folder if it doesn't exist
-			if (this.settings.dailyNotesFolder) {
-				const folderExists = this.app.vault.getAbstractFileByPath(this.settings.dailyNotesFolder);
-				if (!folderExists) {
-					await this.app.vault.createFolder(this.settings.dailyNotesFolder);
-				}
-			}
-			file = await this.app.vault.create(filePath, '');
-		}
-
-		if (!(file instanceof TFile)) return;
+		const file = await this.ensureDailyNoteForDate(date);
 
 		let content = await this.app.vault.read(file);
 

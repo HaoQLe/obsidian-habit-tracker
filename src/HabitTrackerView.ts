@@ -11,12 +11,14 @@ export class HabitTrackerView extends ItemView {
 	private isRefreshing = false;
 	private collapsedHabits: Set<string> = new Set();
 	private saveSettings: () => Promise<void>;
+	private selectedDate: string;
 
 	constructor(leaf: WorkspaceLeaf, habitService: HabitService, settings: HabitTrackerSettings, saveSettings: () => Promise<void>) {
 		super(leaf);
 		this.habitService = habitService;
 		this.settings = settings;
 		this.saveSettings = saveSettings;
+		this.selectedDate = moment().format(this.settings.dateFormat);
 	}
 
 	getViewType() {
@@ -46,7 +48,7 @@ export class HabitTrackerView extends ItemView {
 		this.isRefreshing = true;
 
 		try {
-			this.habitData = await this.habitService.getAllHabitData();
+			this.habitData = await this.habitService.getAllHabitData(this.selectedDate);
 			this.render();
 		} catch (error) {
 			console.error('Error refreshing habit tracker:', error);
@@ -66,13 +68,17 @@ export class HabitTrackerView extends ItemView {
 		header.createEl('h2', { text: 'Daily Habits' });
 		
 		const dateEl = header.createDiv('habit-tracker-date');
-		dateEl.createEl('span', { 
-			text: new Date().toLocaleDateString('en-US', { 
-				weekday: 'long', 
-				year: 'numeric', 
-				month: 'long', 
-				day: 'numeric' 
-			}) 
+		const displayDate = moment(this.selectedDate, this.settings.dateFormat, true).isValid()
+			? moment(this.selectedDate, this.settings.dateFormat).format('dddd, MMMM D, YYYY')
+			: this.selectedDate;
+		dateEl.createEl('span', { text: displayDate });
+
+		const selectDateBtn = header.createEl('button', {
+			text: '📅 Select Date',
+			cls: 'select-date-btn'
+		});
+		selectDateBtn.addEventListener('click', async () => {
+			await this.promptForDateSelection();
 		});
 
 		// Insert Calendar button
@@ -115,7 +121,7 @@ export class HabitTrackerView extends ItemView {
 
 		// Today's Checklist Section
 		const checklistSection = contentEl.createDiv('habit-checklist-section');
-		checklistSection.createEl('h3', { text: "Today's Checklist" });
+		checklistSection.createEl('h3', { text: `Checklist for ${displayDate}` });
 
 		const habitsList = checklistSection.createDiv('habit-checklist-list');
 
@@ -124,9 +130,9 @@ export class HabitTrackerView extends ItemView {
 
 			const habitItem = habitsList.createDiv('habit-checklist-item');
 			
-			// Get today's status first
-			const today = habit.completions[habit.completions.length - 1];
-			const isCompleted = today?.completed || false;
+			// Get selected date status first
+			const selected = habit.completions[habit.completions.length - 1];
+			const isCompleted = selected?.completed || false;
 			
 			// Apply incomplete class for visual styling
 			if (!isCompleted) {
@@ -169,7 +175,7 @@ export class HabitTrackerView extends ItemView {
 					placeholder: placeholderValue
 				}) as HTMLInputElement;
 				// Only set actual value if today already has a value
-				valueInput.value = today?.value ? String(today.value) : '';
+				valueInput.value = selected?.value ? String(selected.value) : '';
 			}
 
 			// Streak badge or broken streak indicator
@@ -190,7 +196,7 @@ export class HabitTrackerView extends ItemView {
 			checkbox.addEventListener('change', async (e) => {
 				const target = e.target as HTMLInputElement;
 				const value = valueInput?.value;
-				await this.habitService.setHabitStatus(habit.name, target.checked, undefined, value);
+				await this.habitService.setHabitStatus(habit.name, target.checked, this.selectedDate, value);
 				await this.refresh();
 			});
 
@@ -198,7 +204,7 @@ export class HabitTrackerView extends ItemView {
 			if (valueInput) {
 				valueInput.addEventListener('change', async (e) => {
 					const target = e.target as HTMLInputElement;
-					await this.habitService.setHabitStatus(habit.name, checkbox.checked, undefined, target.value);
+					await this.habitService.setHabitStatus(habit.name, checkbox.checked, this.selectedDate, target.value);
 					await this.refresh();
 				});
 			}
@@ -212,12 +218,12 @@ export class HabitTrackerView extends ItemView {
 		const overallStats = statsSection.createDiv('overall-stats');
 		const totalHabits = this.habitData.length;
 		const completedToday = this.habitData.filter(h => {
-			const today = h.completions[h.completions.length - 1];
-			return today?.completed;
+			const selected = h.completions[h.completions.length - 1];
+			return selected?.completed;
 		}).length;
 		
 		overallStats.createEl('div', { 
-			text: `Completed Today: ${completedToday}/${totalHabits}`,
+			text: `Completed ${displayDate}: ${completedToday}/${totalHabits}`,
 			cls: 'overall-stat-item'
 		});
 
@@ -267,8 +273,8 @@ export class HabitTrackerView extends ItemView {
 
 			// Current streak
 			const streakCard = statsGrid.createDiv('stat-card');
-			const todayCompleted = habit.completions[habit.completions.length - 1]?.completed || false;
-			if (habit.currentStreak === 0 && !todayCompleted) {
+			const selectedCompleted = habit.completions[habit.completions.length - 1]?.completed || false;
+			if (habit.currentStreak === 0 && !selectedCompleted) {
 				streakCard.addClass('streak-broken');
 			}
 			streakCard.createEl('div', { text: 'Current Streak', cls: 'stat-label' });
@@ -324,30 +330,28 @@ export class HabitTrackerView extends ItemView {
 		}
 	}
 
+	getSelectedDate(): string {
+		return this.selectedDate;
+	}
+
+	async promptForDateSelection(): Promise<void> {
+		const existingDates = await this.habitService.getExistingDailyNoteDates();
+		new HabitDateSelectorModal(this.app, this.settings, this.selectedDate, existingDates, async (selectedDate) => {
+			this.selectedDate = selectedDate;
+			const file = await this.habitService.ensureDailyNoteForDate(selectedDate);
+			await this.habitService.ensureHabitsForDate(selectedDate);
+			const leaf = this.app.workspace.getLeaf(false);
+			await leaf.openFile(file);
+			await this.refresh();
+		}).open();
+	}
+
 	private async insertCalendarIntoNote() {
 		const { vault, workspace } = this.app;
-		const today = moment().format(this.settings.dateFormat);
-		const folder = this.settings.dailyNotesFolder;
-		const fileName = `${today}.md`;
-		const filePath = folder ? `${folder}/${fileName}` : fileName;
+		const selectedDate = this.selectedDate;
 		
-		// Get or create today's note
-		let file = vault.getAbstractFileByPath(filePath);
-		
-		if (!file) {
-			// Create the file if it doesn't exist
-			if (folder) {
-				const folderExists = vault.getAbstractFileByPath(folder);
-				if (!folderExists) {
-					await vault.createFolder(folder);
-				}
-			}
-			file = await vault.create(filePath, `# ${today}\n\n`);
-		}
-		
-		if (file instanceof this.app.vault.adapter.constructor) {
-			return;
-		}
+		// Get or create selected date's note
+		const file = await this.habitService.ensureDailyNoteForDate(selectedDate);
 		
 		// Read current content
 		const content = await vault.read(file as any);
@@ -361,7 +365,7 @@ export class HabitTrackerView extends ItemView {
 		}
 		
 		// Add calendar block at the end
-		const newContent = content + '\n\n```habit-calendar\n```\n';
+		const newContent = content + `\n\n\`\`\`habit-calendar\ndate: ${selectedDate}\n\`\`\`\n`;
 		await vault.modify(file as any, newContent);
 		
 		// Open the file
@@ -382,29 +386,16 @@ export class HabitTrackerView extends ItemView {
 		// Show modal to select habit
 		new HabitChartSelectorModal(this.app, valueHabits, async (selectedHabit) => {
 			const { vault, workspace } = this.app;
-			const today = (window as any).moment().format(this.settings.dateFormat);
-			const folder = this.settings.dailyNotesFolder;
-			const fileName = `${today}.md`;
-			const filePath = folder ? `${folder}/${fileName}` : fileName;
+			const selectedDate = this.selectedDate;
 			
-			// Get or create today's note
-			let file = vault.getAbstractFileByPath(filePath);
-			
-			if (!file) {
-				if (folder) {
-					const folderExists = vault.getAbstractFileByPath(folder);
-					if (!folderExists) {
-						await vault.createFolder(folder);
-					}
-				}
-				file = await vault.create(filePath, `# ${today}\n\n`);
-			}
+			// Get or create selected date's note
+			const file = await this.habitService.ensureDailyNoteForDate(selectedDate);
 			
 			// Read current content
 			const content = await vault.read(file as any);
 			
 			// Add chart block at the end with selected habit
-			const newContent = content + `\n\n\`\`\`habit-chart\nhabit: ${selectedHabit}\n\`\`\`\n`;
+			const newContent = content + `\n\n\`\`\`habit-chart\nhabit: ${selectedHabit}\ndate: ${selectedDate}\n\`\`\`\n`;
 			await vault.modify(file as any, newContent);
 			
 			// Open the file
@@ -413,7 +404,7 @@ export class HabitTrackerView extends ItemView {
 		}).open();
 	}
 
-	async renderChartCodeBlock(el: HTMLElement, habitName: string) {
+	async renderChartCodeBlock(el: HTMLElement, habitName: string, baseDate?: string) {
 		const container = el.createDiv('value-chart-container');
 		
 		if (!habitName || habitName === 'HabitName') {
@@ -425,7 +416,10 @@ export class HabitTrackerView extends ItemView {
 		}
 		
 		// Get all habit data
-		const allHabitData = await this.habitService.getAllHabitData();
+		const chartBaseDate = baseDate && moment(baseDate, this.settings.dateFormat, true).isValid()
+			? baseDate
+			: this.selectedDate;
+		const allHabitData = await this.habitService.getAllHabitData(chartBaseDate);
 		const habit = allHabitData.find(h => h.name === habitName);
 		
 		if (!habit) {
@@ -592,6 +586,69 @@ export class HabitTrackerView extends ItemView {
 				}
 			}).textContent = data[data.length - 1].date;
 		}
+	}
+}
+
+class HabitDateSelectorModal extends SuggestModal<string> {
+	private settings: HabitTrackerSettings;
+	private onSelect: (date: string) => void;
+	private baseDates: string[];
+	private existingDates: string[];
+
+	constructor(app: App, settings: HabitTrackerSettings, selectedDate: string, existingDates: string[], onSelect: (date: string) => void) {
+		super(app);
+		this.settings = settings;
+		this.onSelect = onSelect;
+		this.baseDates = this.buildBaseDates(selectedDate);
+		this.existingDates = existingDates;
+		this.setPlaceholder(`Enter date (${this.settings.dateFormat})`);
+	}
+
+	getSuggestions(query: string): string[] {
+		const trimmed = query.trim();
+		const lowerQuery = trimmed.toLowerCase();
+		const sourceDates = this.existingDates.length > 0 ? this.existingDates : this.baseDates;
+		const matches = sourceDates.filter(date => date.toLowerCase().includes(lowerQuery));
+		const parsed = this.parseDateInput(trimmed);
+		if (parsed && !matches.includes(parsed)) {
+			matches.unshift(parsed);
+		}
+		return matches;
+	}
+
+	renderSuggestion(date: string, el: HTMLElement) {
+		const label = moment(date, this.settings.dateFormat, true).isValid()
+			? moment(date, this.settings.dateFormat).format('ddd, MMM D, YYYY')
+			: date;
+		el.createEl('div', { text: label });
+		el.createEl('small', { text: date, cls: 'habit-date-suggestion' });
+	}
+
+	onChooseSuggestion(date: string, evt: MouseEvent | KeyboardEvent) {
+		this.onSelect(date);
+	}
+
+	private parseDateInput(input: string): string | null {
+		if (!input) return null;
+		const formats = [
+			this.settings.dateFormat,
+			'YYYY-MM-DD',
+			'MM/DD/YYYY',
+			'MMM D, YYYY'
+		];
+		const parsed = moment(input, formats, true);
+		return parsed.isValid() ? parsed.format(this.settings.dateFormat) : null;
+	}
+
+	private buildBaseDates(selectedDate: string): string[] {
+		const base = moment(selectedDate, this.settings.dateFormat, true).isValid()
+			? moment(selectedDate, this.settings.dateFormat)
+			: moment();
+		const dates: string[] = [];
+		for (let i = 0; i < 30; i++) {
+			dates.push(base.clone().subtract(i, 'days').format(this.settings.dateFormat));
+		}
+		return dates;
 	}
 }
 
