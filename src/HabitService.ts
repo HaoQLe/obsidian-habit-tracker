@@ -69,7 +69,7 @@ export class HabitService {
 			}
 
 			// Create the file with a simple header
-			file = await this.app.vault.create(filePath, `# ${date}\n\n`);
+			file = await this.app.vault.create(filePath, '');
 		}
 
 		return file as TFile;
