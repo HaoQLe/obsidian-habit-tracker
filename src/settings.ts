@@ -1,4 +1,5 @@
-import { PluginSettingTab, Setting, App, Plugin } from 'obsidian';
+import { PluginSettingTab, Setting, App, Plugin, Modal, Notice } from 'obsidian';
+import { HabitService } from './HabitService';
 
 export interface HabitTrackerSettings {
 	dailyNotesFolder: string;
@@ -25,9 +26,9 @@ export const DEFAULT_SETTINGS: HabitTrackerSettings = {
 }
 
 export class HabitTrackerSettingTab extends PluginSettingTab {
-	plugin: Plugin & { settings: HabitTrackerSettings; saveSettings: () => Promise<void> };
+	plugin: Plugin & { settings: HabitTrackerSettings; saveSettings: () => Promise<void>; habitService: HabitService };
 
-	constructor(app: App, plugin: Plugin & { settings: HabitTrackerSettings; saveSettings: () => Promise<void> }) {
+	constructor(app: App, plugin: Plugin & { settings: HabitTrackerSettings; saveSettings: () => Promise<void>; habitService: HabitService }) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -171,6 +172,31 @@ export class HabitTrackerSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				});
 
+				const renameBtn = habitItemEl.createEl('button', {
+					cls: 'habit-rename-btn',
+					text: '✏',
+					title: 'Rename habit across all notes',
+				});
+
+				renameBtn.addEventListener('click', async () => {
+					const currentName = this.plugin.settings.habits[index];
+					if (!currentName.trim()) return;
+					new RenameHabitModal(this.app, currentName, this.plugin.settings.habits, async (newName) => {
+						const count = await this.plugin.habitService.renameHabit(currentName, newName);
+						// Update all settings arrays
+						this.plugin.settings.habits[index] = newName;
+						if (this.plugin.settings.habitsWithValues.includes(currentName)) {
+							this.plugin.settings.habitsWithValues = this.plugin.settings.habitsWithValues.map(h => h === currentName ? newName : h);
+						}
+						if (this.plugin.settings.calendarVisibleHabits.includes(currentName)) {
+							this.plugin.settings.calendarVisibleHabits = this.plugin.settings.calendarVisibleHabits.map(h => h === currentName ? newName : h);
+						}
+						await this.plugin.saveSettings();
+						new Notice(`Renamed "${currentName}" to "${newName}" in ${count} note${count !== 1 ? 's' : ''}.`);
+						this.display();
+					}).open();
+				});
+
 				const deleteBtn = habitItemEl.createEl('button', {
 					cls: 'habit-delete-btn',
 					text: '×',
@@ -246,5 +272,75 @@ export class HabitTrackerSettingTab extends PluginSettingTab {
 				cls: 'setting-item-description'
 			});
 		}
+	}
+}
+
+class RenameHabitModal extends Modal {
+	private oldName: string;
+	private existingHabits: string[];
+	private onSubmit: (newName: string) => void;
+
+	constructor(app: App, oldName: string, existingHabits: string[], onSubmit: (newName: string) => void) {
+		super(app);
+		this.oldName = oldName;
+		this.existingHabits = existingHabits;
+		this.onSubmit = onSubmit;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.createEl('h3', { text: 'Rename Habit' });
+
+		const inputEl = contentEl.createEl('input', {
+			type: 'text',
+			cls: 'habit-rename-input',
+			value: this.oldName,
+		}) as HTMLInputElement;
+		inputEl.style.width = '100%';
+		inputEl.select();
+
+		const errorEl = contentEl.createEl('p', { cls: 'habit-rename-error' });
+		errorEl.style.color = 'var(--text-error)';
+		errorEl.style.display = 'none';
+
+		const btnContainer = contentEl.createDiv({ cls: 'habit-rename-buttons' });
+		btnContainer.style.display = 'flex';
+		btnContainer.style.justifyContent = 'flex-end';
+		btnContainer.style.gap = '8px';
+		btnContainer.style.marginTop = '12px';
+
+		const cancelBtn = btnContainer.createEl('button', { text: 'Cancel' });
+		cancelBtn.addEventListener('click', () => this.close());
+
+		const submitBtn = btnContainer.createEl('button', { text: 'Rename', cls: 'mod-cta' });
+
+		const doSubmit = () => {
+			const newName = inputEl.value.trim();
+			if (!newName) {
+				errorEl.setText('Name cannot be empty.');
+				errorEl.style.display = 'block';
+				return;
+			}
+			if (newName === this.oldName) {
+				this.close();
+				return;
+			}
+			if (this.existingHabits.includes(newName)) {
+				errorEl.setText('A habit with this name already exists.');
+				errorEl.style.display = 'block';
+				return;
+			}
+			this.onSubmit(newName);
+			this.close();
+		};
+
+		submitBtn.addEventListener('click', doSubmit);
+		inputEl.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') doSubmit();
+		});
+	}
+
+	onClose() {
+		this.contentEl.empty();
 	}
 }

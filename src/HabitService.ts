@@ -385,6 +385,58 @@ export class HabitService {
 	}
 
 	/**
+	 * Rename a habit across all daily note files.
+	 * Updates checkbox lines within ## Habits sections, preserving completion status and values.
+	 * Returns the number of files modified.
+	 */
+	async renameHabit(oldName: string, newName: string): Promise<number> {
+		const files = this.app.vault.getFiles();
+		const folderPrefix = this.settings.dailyNotesFolder
+			? `${this.settings.dailyNotesFolder}/`
+			: '';
+		let modifiedCount = 0;
+
+		for (const file of files) {
+			if (!file.path.endsWith('.md')) continue;
+			if (folderPrefix && !file.path.startsWith(folderPrefix)) continue;
+
+			// Only process files that look like daily notes
+			const dateStr = file.basename;
+			if (!moment(dateStr, this.settings.dateFormat, true).isValid()) continue;
+
+			const content = await this.app.vault.read(file);
+
+			// Only modify within the ## Habits section
+			const sectionMatch = content.match(/^## Habits\s*$/m);
+			if (!sectionMatch) continue;
+
+			const sectionStart = sectionMatch.index! + sectionMatch[0].length;
+			const afterSection = content.substring(sectionStart);
+			const nextSectionMatch = afterSection.match(/^## /m);
+			const sectionEnd = nextSectionMatch
+				? sectionStart + nextSectionMatch.index!
+				: content.length;
+
+			const before = content.substring(0, sectionStart);
+			const sectionContent = content.substring(sectionStart, sectionEnd);
+			const after = content.substring(sectionEnd);
+
+			const habitPattern = new RegExp(
+				`(- \\[[ x]\\] )${this.escapeRegex(oldName)}((?:\\s*\\(value: [^)]+\\))?)$`,
+				'gmi'
+			);
+
+			if (!habitPattern.test(sectionContent)) continue;
+
+			const updatedSection = sectionContent.replace(habitPattern, `$1${newName}$2`);
+			await this.app.vault.modify(file, before + updatedSection + after);
+			modifiedCount++;
+		}
+
+		return modifiedCount;
+	}
+
+	/**
 	 * Clear all habits for a specific date (uncheck all)
 	 */
 	async clearAllHabitsForDate(date: string = moment().format(this.settings.dateFormat)): Promise<void> {

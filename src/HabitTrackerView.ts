@@ -12,7 +12,6 @@ export class HabitTrackerView extends ItemView {
 	private collapsedHabits: Set<string> = new Set();
 	private saveSettings: () => Promise<void>;
 	private selectedDate: string;
-	private isViewingToday: boolean = true;
 
 	constructor(leaf: WorkspaceLeaf, habitService: HabitService, settings: HabitTrackerSettings, saveSettings: () => Promise<void>) {
 		super(leaf);
@@ -20,7 +19,6 @@ export class HabitTrackerView extends ItemView {
 		this.settings = settings;
 		this.saveSettings = saveSettings;
 		this.selectedDate = moment().format(this.settings.dateFormat);
-		this.isViewingToday = true;
 	}
 
 	getViewType() {
@@ -50,10 +48,6 @@ export class HabitTrackerView extends ItemView {
 		this.isRefreshing = true;
 
 		try {
-			// If viewing "today", update selectedDate to current day (handles day changes)
-			if (this.isViewingToday) {
-				this.selectedDate = moment().format(this.settings.dateFormat);
-			}
 			this.habitData = await this.habitService.getAllHabitData(this.selectedDate);
 			this.render();
 		} catch (error) {
@@ -344,9 +338,6 @@ export class HabitTrackerView extends ItemView {
 		const existingDates = await this.habitService.getExistingDailyNoteDates();
 		new HabitDateSelectorModal(this.app, this.settings, this.selectedDate, existingDates, async (selectedDate) => {
 			this.selectedDate = selectedDate;
-			// Check if the selected date is today
-			const today = moment().format(this.settings.dateFormat);
-			this.isViewingToday = (selectedDate === today);
 			const file = await this.habitService.ensureDailyNoteForDate(selectedDate);
 			await this.habitService.ensureHabitsForDate(selectedDate);
 			const leaf = this.app.workspace.getLeaf(false);
