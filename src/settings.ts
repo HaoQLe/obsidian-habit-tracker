@@ -145,10 +145,7 @@ export class HabitTrackerSettingTab extends PluginSettingTab {
 					value: habit,
 				});
 
-				textInput.addEventListener('change', async () => {
-					this.plugin.settings.habits[index] = textInput.value;
-					await this.plugin.saveSettings();
-				});
+				textInput.readOnly = true;
 
 				// Value tracking checkbox
 				const valueCheckboxWrapper = habitItemEl.createDiv('habit-value-checkbox-wrapper');
