@@ -14,6 +14,7 @@ export interface HabitData {
 	longestStreak: number;
 	completionRate: number;
 	totalDaysCompleted: number;
+	totalActiveDays: number; // Number of active days in the 30-day window
 	isValueBased?: boolean; // Whether this habit tracks a value
 }
 
@@ -211,10 +212,18 @@ export class HabitService {
 				});
 			}
 			
-			// Calculate streaks and statistics
-			const { currentStreak, longestStreak } = this.calculateStreaks(completions);
-			const completed = completions.filter(c => c.completed).length;
-			const completionRate = completions.length > 0 ? (completed / completions.length) * 100 : 0;
+			// Calculate streaks and statistics, respecting active days
+			const activeDays = this.settings.habitActiveDays?.[habitName] || [];
+			const { currentStreak, longestStreak } = this.calculateStreaks(completions, activeDays);
+			const activeCompletions = activeDays.length > 0
+				? completions.filter(c => {
+					const dow = moment(c.date, this.settings.dateFormat).day();
+					return activeDays.includes(dow);
+				})
+				: completions;
+			const completed = activeCompletions.filter(c => c.completed).length;
+			const totalActiveDays = activeCompletions.length;
+			const completionRate = totalActiveDays > 0 ? (completed / totalActiveDays) * 100 : 0;
 			
 			habits.push({
 				name: habitName,
@@ -223,6 +232,7 @@ export class HabitService {
 				longestStreak,
 				completionRate,
 				totalDaysCompleted: completed,
+				totalActiveDays,
 				isValueBased
 			});
 		}
@@ -323,16 +333,23 @@ export class HabitService {
 	 * Current streak: consecutive completed days counting backwards, ignoring today if not completed
 	 * This represents the "running" streak that can be extended if today is completed
 	 */
-	private calculateStreaks(completions: HabitCompletion[]): { currentStreak: number; longestStreak: number } {
+	private calculateStreaks(completions: HabitCompletion[], activeDays: number[] = []): { currentStreak: number; longestStreak: number } {
 		if (completions.length === 0) {
 			return { currentStreak: 0, longestStreak: 0 };
 		}
 
+		const isActiveDay = (index: number): boolean => {
+			if (activeDays.length === 0) return true; // empty = every day
+			const dow = moment(completions[index].date, this.settings.dateFormat).day();
+			return activeDays.includes(dow);
+		};
+
 		let longestStreak = 0;
 		let tempStreak = 0;
-		
-		// First pass: calculate longest streak by going through all completions
+
+		// First pass: calculate longest streak (skip inactive days entirely)
 		for (let i = completions.length - 1; i >= 0; i--) {
+			if (!isActiveDay(i)) continue; // inactive days don't affect streaks
 			if (completions[i].completed) {
 				tempStreak++;
 				longestStreak = Math.max(longestStreak, tempStreak);
@@ -340,26 +357,30 @@ export class HabitService {
 				tempStreak = 0;
 			}
 		}
-		
+
 		// Second pass: calculate current streak
-		// Start from yesterday (or today if today is completed) and count backwards
 		let currentStreak = 0;
 		let startIdx = completions.length - 1;
-		
-		// If today is not completed, start from yesterday
-		if (!completions[startIdx].completed && startIdx > 0) {
-			startIdx = startIdx - 1;
+
+		// Skip to the most recent active day if today is inactive or not completed
+		while (startIdx > 0 && !isActiveDay(startIdx)) {
+			startIdx--;
 		}
-		
-		// Count consecutive completed days from the starting point backwards
+		// If the most recent active day is not completed, skip it (grace window)
+		if (startIdx >= 0 && isActiveDay(startIdx) && !completions[startIdx].completed && startIdx > 0) {
+			startIdx--;
+		}
+
+		// Count consecutive completed active days backwards
 		for (let i = startIdx; i >= 0; i--) {
+			if (!isActiveDay(i)) continue; // skip inactive days
 			if (completions[i].completed) {
 				currentStreak++;
 			} else {
-				break; // Stop at the first incomplete day
+				break;
 			}
 		}
-		
+
 		return { currentStreak, longestStreak };
 	}
 

@@ -11,6 +11,7 @@ export interface HabitTrackerSettings {
 	habitsWithValues: string[]; // Names of habits that track values
 	calendarVisibleHabits: string[]; // Habits visible in calendar view (empty = all)
 	chartDaysWindow: number; // Number of days to show in value charts (7, 14, or 30)
+	habitActiveDays: Record<string, number[]>; // Per-habit active days (0=Sun, 1=Mon, ..., 6=Sat). Missing/empty = every day.
 }
 
 export const DEFAULT_SETTINGS: HabitTrackerSettings = {
@@ -23,6 +24,7 @@ export const DEFAULT_SETTINGS: HabitTrackerSettings = {
 	habitsWithValues: [],
 	calendarVisibleHabits: [],
 	chartDaysWindow: 7,
+	habitActiveDays: {},
 }
 
 export class HabitTrackerSettingTab extends PluginSettingTab {
@@ -172,6 +174,50 @@ export class HabitTrackerSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				});
 
+				// Active days selector
+				const activeDaysWrapper = habitItemEl.createDiv('habit-active-days-wrapper');
+				activeDaysWrapper.createEl('span', {
+					text: 'Active:',
+					cls: 'habit-active-days-label'
+				});
+				const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+				const activeDays = this.plugin.settings.habitActiveDays[habit] || [];
+				const allActive = activeDays.length === 0; // empty means every day
+
+				for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+					const dayBtn = activeDaysWrapper.createEl('button', {
+						text: dayNames[dayIdx],
+						cls: 'habit-day-btn',
+						title: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayIdx]
+					});
+					if (allActive || activeDays.includes(dayIdx)) {
+						dayBtn.addClass('active');
+					}
+					dayBtn.addEventListener('click', async () => {
+						if (!habit) return;
+						let current = this.plugin.settings.habitActiveDays[habit] || [];
+						if (current.length === 0) {
+							// Currently "every day" — clicking a day means "only NOT this day"
+							current = [0, 1, 2, 3, 4, 5, 6].filter(d => d !== dayIdx);
+						} else if (current.includes(dayIdx)) {
+							current = current.filter(d => d !== dayIdx);
+							if (current.length === 0) {
+								// Don't allow zero active days, re-enable all
+								current = [];
+							}
+						} else {
+							current.push(dayIdx);
+							current.sort();
+							if (current.length === 7) {
+								current = []; // all days = empty array
+							}
+						}
+						this.plugin.settings.habitActiveDays[habit] = current;
+						await this.plugin.saveSettings();
+						this.display();
+					});
+				}
+
 				const renameBtn = habitItemEl.createEl('button', {
 					cls: 'habit-rename-btn',
 					text: '✏',
@@ -191,6 +237,10 @@ export class HabitTrackerSettingTab extends PluginSettingTab {
 						if (this.plugin.settings.calendarVisibleHabits.includes(currentName)) {
 							this.plugin.settings.calendarVisibleHabits = this.plugin.settings.calendarVisibleHabits.map(h => h === currentName ? newName : h);
 						}
+						if (this.plugin.settings.habitActiveDays[currentName]) {
+							this.plugin.settings.habitActiveDays[newName] = this.plugin.settings.habitActiveDays[currentName];
+							delete this.plugin.settings.habitActiveDays[currentName];
+						}
 						await this.plugin.saveSettings();
 						new Notice(`Renamed "${currentName}" to "${newName}" in ${count} note${count !== 1 ? 's' : ''}.`);
 						this.display();
@@ -206,6 +256,7 @@ export class HabitTrackerSettingTab extends PluginSettingTab {
 					const deletingHabit = this.plugin.settings.habits[index];
 					this.plugin.settings.habits.splice(index, 1);
 					this.plugin.settings.habitsWithValues = this.plugin.settings.habitsWithValues.filter(h => h !== deletingHabit);
+					delete this.plugin.settings.habitActiveDays[deletingHabit];
 					await this.plugin.saveSettings();
 					this.display();
 				});

@@ -99,8 +99,23 @@ export class HabitTrackerView extends ItemView {
 			await this.insertChartIntoNote();
 		});
 
+		// Today button
+		const todayBtn = header.createEl('button', {
+			text: '📌 Today',
+			cls: 'today-btn'
+		});
+		todayBtn.addEventListener('click', async () => {
+			const today = moment().format(this.settings.dateFormat);
+			this.selectedDate = today;
+			const file = await this.habitService.ensureDailyNoteForDate(today);
+			await this.habitService.ensureHabitsForDate(today);
+			const leaf = this.app.workspace.getLeaf(false);
+			await leaf.openFile(file);
+			await this.refresh();
+		});
+
 		// Refresh button
-		const refreshBtn = header.createEl('button', { 
+		const refreshBtn = header.createEl('button', {
 			text: 'Refresh',
 			cls: 'mod-cta'
 		});
@@ -129,14 +144,22 @@ export class HabitTrackerView extends ItemView {
 			if (!habit.name.trim()) continue;
 
 			const habitItem = habitsList.createDiv('habit-checklist-item');
-			
+
+			// Check if this habit is active on the selected day
+			const activeDays = this.settings.habitActiveDays?.[habit.name] || [];
+			const selectedDow = moment(this.selectedDate, this.settings.dateFormat).day();
+			const isActiveToday = activeDays.length === 0 || activeDays.includes(selectedDow);
+
 			// Get selected date status first
 			const selected = habit.completions[habit.completions.length - 1];
 			const isCompleted = selected?.completed || false;
-			
+
 			// Apply incomplete class for visual styling
-			if (!isCompleted) {
+			if (!isCompleted && isActiveToday) {
 				habitItem.addClass('habit-incomplete');
+			}
+			if (!isActiveToday) {
+				habitItem.addClass('habit-rest-day');
 			}
 			
 			// Checkbox
@@ -180,13 +203,18 @@ export class HabitTrackerView extends ItemView {
 
 			// Streak badge or broken streak indicator
 			const streakEl = habitItem.createDiv('habit-streak');
-			if (habit.currentStreak > 0) {
-				streakEl.createEl('span', { 
+			if (!isActiveToday) {
+				streakEl.createEl('span', {
+					text: '😴 REST DAY',
+					cls: 'streak-text rest-day'
+				});
+			} else if (habit.currentStreak > 0) {
+				streakEl.createEl('span', {
 					text: `🔥 ${habit.currentStreak} day streak`,
 					cls: 'streak-text'
 				});
 			} else if (!isCompleted) {
-				streakEl.createEl('span', { 
+				streakEl.createEl('span', {
 					text: '⚠️ NOT DONE',
 					cls: 'streak-text warning'
 				});
@@ -293,7 +321,8 @@ export class HabitTrackerView extends ItemView {
 
 			// Completion rate
 			const rateCard = statsGrid.createDiv('stat-card');
-			rateCard.createEl('div', { text: 'Completion Rate (30d)', cls: 'stat-label' });
+			const rateLabel = habit.totalActiveDays < 30 ? `Completion Rate (${habit.totalActiveDays}d)` : 'Completion Rate (30d)';
+			rateCard.createEl('div', { text: rateLabel, cls: 'stat-label' });
 			rateCard.createEl('div', { 
 				text: `${Math.round(habit.completionRate)}%`, 
 				cls: 'stat-value'
@@ -303,8 +332,8 @@ export class HabitTrackerView extends ItemView {
 			const progressContainer = habitCard.createDiv('progress-container');
 			const progressBar = progressContainer.createDiv('progress-bar');
 			progressBar.style.width = `${habit.completionRate}%`;
-			progressContainer.createEl('span', { 
-				text: `${habit.totalDaysCompleted}/30 days`,
+			progressContainer.createEl('span', {
+				text: `${habit.totalDaysCompleted}/${habit.totalActiveDays} days`,
 				cls: 'progress-text'
 			});
 

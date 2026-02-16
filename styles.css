@@ -479,6 +479,61 @@
 	color: var(--text-error);
 	border-color: var(--text-error);
 }
+
+/* Active days selector in settings */
+.habit-active-days-wrapper {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.habit-active-days-label {
+	font-size: 0.8em;
+	color: var(--text-muted);
+	margin-right: 2px;
+}
+
+.habit-day-btn {
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	font-size: 0.75em;
+	font-weight: 600;
+	border-radius: 50%;
+	border: 1px solid var(--background-modifier-border);
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: all 0.15s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.habit-day-btn:hover {
+	border-color: var(--interactive-accent);
+	color: var(--text-normal);
+}
+
+.habit-day-btn.active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-color: var(--interactive-accent);
+}
+
+/* Rest day styling in checklist */
+.habit-checklist-item.habit-rest-day {
+	opacity: 0.5;
+	border-color: var(--background-modifier-border);
+	border-style: dashed;
+}
+
+.streak-text.rest-day {
+	color: var(--text-muted);
+	font-weight: 500;
+	font-size: 0.85em;
+}
 /* Insert Calendar and Chart Buttons */
 .insert-calendar-btn,
 .insert-chart-btn {
