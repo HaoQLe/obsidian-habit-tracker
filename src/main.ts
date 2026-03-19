@@ -1,4 +1,4 @@
-import { Plugin } from 'obsidian';
+import { Plugin, Platform } from 'obsidian';
 import { HabitTrackerView, VIEW_TYPE_HABIT_TRACKER } from './HabitTrackerView';
 import { HabitService } from './HabitService';
 import { HabitTrackerSettings, DEFAULT_SETTINGS } from './settings';
@@ -7,6 +7,7 @@ import { HabitTrackerSettingTab } from './settings';
 export default class HabitTrackerPlugin extends Plugin {
 	settings: HabitTrackerSettings;
 	habitService: HabitService;
+	private registeredHabitCommandIds: Set<string> = new Set();
 
 	async onload() {
 		await this.loadSettings();
@@ -46,7 +47,9 @@ export default class HabitTrackerPlugin extends Plugin {
 				const { workspace } = this.app;
 				let leaf = workspace.getLeavesOfType(VIEW_TYPE_HABIT_TRACKER)[0];
 				if (!leaf) {
-					leaf = workspace.getRightLeaf(false);
+					leaf = Platform.isMobile
+						? workspace.getLeaf(false)
+						: workspace.getRightLeaf(false);
 					await leaf.setViewState({ type: VIEW_TYPE_HABIT_TRACKER, active: true });
 				}
 				workspace.revealLeaf(leaf);
@@ -70,6 +73,8 @@ export default class HabitTrackerPlugin extends Plugin {
 			const view = this.app.workspace.getLeavesOfType(VIEW_TYPE_HABIT_TRACKER)[0]?.view as HabitTrackerView;
 			if (view) {
 				await view.renderChartCodeBlock(el, habitName || '', baseDate);
+			} else {
+				el.createEl('p', { text: 'Open the Habit Tracker panel to display this chart.', cls: 'value-chart-empty' });
 			}
 		});
 
@@ -102,7 +107,7 @@ export default class HabitTrackerPlugin extends Plugin {
 		
 		if (leaf) {
 			// View exists - check if it's focused
-			if (leaf.getDisplayText() === workspace.activeLeaf?.getDisplayText()) {
+			if (leaf === workspace.activeLeaf) {
 				// Close it by detaching the leaf
 				leaf.detach();
 			} else {
@@ -111,7 +116,9 @@ export default class HabitTrackerPlugin extends Plugin {
 			}
 		} else {
 			// Create new view
-			leaf = workspace.getRightLeaf(false);
+			leaf = Platform.isMobile
+				? workspace.getLeaf(false)
+				: workspace.getRightLeaf(false);
 			await leaf.setViewState({ type: VIEW_TYPE_HABIT_TRACKER, active: true });
 			workspace.revealLeaf(leaf);
 		}
@@ -121,21 +128,22 @@ export default class HabitTrackerPlugin extends Plugin {
 	 * Add toggle commands for each configured habit
 	 */
 	private addCommandsForHabits() {
-		// Note: Obsidian doesn't provide a direct way to remove commands,
-		// but we can add new ones and they will override if IDs match
-		
-		// Add commands for current habits
+		// Add commands for current habits (skip already-registered IDs to avoid palette duplicates)
 		for (const habit of this.settings.habits) {
 			if (!habit.trim()) continue;
-			
+			const commandId = `toggle-habit-${habit.toLowerCase().replace(/\s+/g, '-')}`;
+			if (this.registeredHabitCommandIds.has(commandId)) continue;
+			this.registeredHabitCommandIds.add(commandId);
 			this.addCommand({
-				id: `toggle-habit-${habit.toLowerCase().replace(/\s+/g, '-')}`,
+				id: commandId,
 				name: `Toggle Habit: ${habit}`,
 				callback: async () => {
-					const currentStatus = await this.habitService.getHabitStatus(habit);
-					await this.habitService.setHabitStatus(habit, !currentStatus);
 					// Refresh view if open
 					const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_HABIT_TRACKER);
+					const openView = leaves[0]?.view instanceof HabitTrackerView ? leaves[0].view as HabitTrackerView : null;
+					const date = openView ? openView.getSelectedDate() : undefined;
+					const currentStatus = await this.habitService.getHabitStatus(habit, date);
+					await this.habitService.setHabitStatus(habit, !currentStatus.completed, date);
 					for (const leaf of leaves) {
 						if (leaf.view instanceof HabitTrackerView) {
 							await leaf.view.refresh();
@@ -187,15 +195,16 @@ export default class HabitTrackerPlugin extends Plugin {
 			label.appendText(habit.name);
 
 			checkbox.addEventListener('change', async () => {
+				const isNoneMarker = this.settings.calendarVisibleHabits.length === 1 && this.settings.calendarVisibleHabits[0] === '__NONE__';
 				if (checkbox.checked) {
-					if (this.settings.calendarVisibleHabits.length === 0) {
+					if (this.settings.calendarVisibleHabits.length === 0 || isNoneMarker) {
 						this.settings.calendarVisibleHabits = habitData.map(h => h.name);
 					}
 					if (!this.settings.calendarVisibleHabits.includes(habit.name)) {
 						this.settings.calendarVisibleHabits.push(habit.name);
 					}
 				} else {
-					if (this.settings.calendarVisibleHabits.length === 0) {
+					if (this.settings.calendarVisibleHabits.length === 0 || isNoneMarker) {
 						this.settings.calendarVisibleHabits = habitData.map(h => h.name);
 					}
 					this.settings.calendarVisibleHabits = this.settings.calendarVisibleHabits.filter(h => h !== habit.name);

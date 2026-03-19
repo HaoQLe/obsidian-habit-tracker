@@ -191,7 +191,11 @@ export class HabitService {
 
 		// Ensure today's daily note contains checkbox lines for all known habits
 		// so the checklist is present even when a habit hasn't been completed yet.
-		await this.ensureHabitsForDate(baseDateStr);
+		// Only run for today — viewing past dates must never modify historical notes.
+		const todayStr = moment().format(this.settings.dateFormat);
+		if (baseDateStr === todayStr) {
+			await this.ensureHabitsForDate(baseDateStr, habitNames);
+		}
 		
 		for (const habitName of habitNames) {
 			if (!habitName.trim()) continue;
@@ -214,7 +218,7 @@ export class HabitService {
 			
 			// Calculate streaks and statistics, respecting active days
 			const activeDays = this.settings.habitActiveDays?.[habitName] || [];
-			const { currentStreak, longestStreak } = this.calculateStreaks(completions, activeDays);
+			const { currentStreak, longestStreak } = this.calculateStreaks(completions, activeDays, todayStr);
 			const activeCompletions = activeDays.length > 0
 				? completions.filter(c => {
 					const dow = moment(c.date, this.settings.dateFormat).day();
@@ -268,10 +272,10 @@ export class HabitService {
 	 * Ensure a given date's note contains checkbox entries for all habits.
 	 * If a checkbox is missing for a habit, insert an unchecked line (`- [ ] Habit`).
 	 */
-	async ensureHabitsForDate(date: string): Promise<void> {
-		const habitNames = this.settings.autoDetectHabits
+	async ensureHabitsForDate(date: string, preloadedHabitNames?: string[]): Promise<void> {
+		const habitNames = preloadedHabitNames ?? (this.settings.autoDetectHabits
 			? await this.autoDetectHabits(30, date)
-			: this.settings.habits;
+			: this.settings.habits);
 
 		if (!habitNames || habitNames.length === 0) return;
 
@@ -300,20 +304,20 @@ export class HabitService {
 			? afterSection.substring(0, nextSectionMatch.index)
 			: afterSection;
 
-		// Collect existing habit names in the section
+		// Collect existing habit names in the section (lowercased for case-insensitive dedup)
 		// Extract habit name only (before optional "(value: ...)" part)
-		const checkboxPattern = /- \[[ x]\] ([^(]+?)(?:\s*\(value: [^)]+\))?$/gm;
+		const checkboxPattern = /- \[[ x]\] ([^(]+?)(?:\s*\(value: [^)]+\))?$/gim;
 		const existing = new Set<string>();
 		let m: RegExpExecArray | null;
 		while ((m = checkboxPattern.exec(sectionContent)) !== null) {
-			existing.add(m[1].trim());
+			existing.add(m[1].trim().toLowerCase());
 		}
 
 		// Build lines to insert for missing habits
 		let linesToInsert = '';
 		for (const habit of habitNames) {
 			if (!habit.trim()) continue;
-			if (!existing.has(habit)) {
+			if (!existing.has(habit.toLowerCase())) {
 				linesToInsert += `- [ ] ${habit}\n`;
 			}
 		}
@@ -333,7 +337,7 @@ export class HabitService {
 	 * Current streak: consecutive completed days counting backwards, ignoring today if not completed
 	 * This represents the "running" streak that can be extended if today is completed
 	 */
-	private calculateStreaks(completions: HabitCompletion[], activeDays: number[] = []): { currentStreak: number; longestStreak: number } {
+	private calculateStreaks(completions: HabitCompletion[], activeDays: number[] = [], today: string = moment().format(this.settings.dateFormat)): { currentStreak: number; longestStreak: number } {
 		if (completions.length === 0) {
 			return { currentStreak: 0, longestStreak: 0 };
 		}
@@ -366,8 +370,9 @@ export class HabitService {
 		while (startIdx > 0 && !isActiveDay(startIdx)) {
 			startIdx--;
 		}
-		// If the most recent active day is not completed, skip it (grace window)
-		if (startIdx >= 0 && isActiveDay(startIdx) && !completions[startIdx].completed && startIdx > 0) {
+		// If the most recent active day is today and not yet completed, skip it (grace window)
+		// Grace only applies to real today — past missed days must not be forgiven.
+		if (startIdx >= 0 && isActiveDay(startIdx) && !completions[startIdx].completed && startIdx > 0 && completions[startIdx].date === today) {
 			startIdx--;
 		}
 
